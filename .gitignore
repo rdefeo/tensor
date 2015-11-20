@@ -144,3 +144,6 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# Datasets
+MNIST_data/
