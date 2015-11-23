@@ -16,10 +16,12 @@ IMAGE_PIXEL_SIZE = IMAGE_EDGE_SIZE * IMAGE_EDGE_SIZE
 
 
 def relu_neural_layer(scope_name, features, tensor_height, tensor_width):
+
     with tf.name_scope(scope_name) as scope:
         weights = tf.Variable(
             tf.truncated_normal([tensor_height, tensor_width],
-                                stddev=1.0 / math.sqrt(tensor_height))),
+                                stddev=1.0 / math.sqrt(float(tensor_height))),
+            name='weights')
         biases = tf.Variable(
             tf.zeros([tensor_width]), name='biases')
         hidden = tf.nn.relu(tf.matmul(features, weights) + biases)
@@ -30,7 +32,8 @@ def linear_neural_layer(scope_name, features, tensor_height, tensor_width):
     with tf.name_scope(scope_name) as scope:
         weights = tf.Variable(
             tf.truncated_normal([tensor_height, tensor_width],
-                                stddev=1.0 / math.sqrt(tensor_height))),
+                                stddev=1.0 / math.sqrt(float(tensor_height))),
+            name='weights')
         biases = tf.Variable(
             tf.zeros([tensor_width]), name='biases')
         logits = tf.matmul(features, weights) + biases
