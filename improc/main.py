@@ -1,16 +1,41 @@
-# from scipy.ndimage import imread
+from os import listdir
+from os.path import isfile, join
+
 import itertools as it
 import numpy as np
 
-
-
+from scipy.ndimage import imread
+from scipy.misc import imshow
+# from cv2 import imread
+from scipy.misc import imsave
 
 import improc.features.preprocess as preprocess
 from improc.features.descriptor import ZernikeDescriptor
 
 
-from scipy.misc import imshow
-from cv2 import imread
+def make_square(img):
+    '''Make an image square by adding white pixels to the smaller dimension,
+    It keeps the original image centered'''
+    img_size = max(img.shape[1], img.shape[0])
+    whitebar_size = (img_size - min(img.shape[1], img.shape[0]))/2
+    new_img = img
+
+    if img.shape[0] > img.shape[1]:
+        whitebar = np.ones((img_size, whitebar_size, 3))*255
+        new_img = np.concatenate((whitebar, img, whitebar), axis=1)
+
+    if img.shape[0] < img.shape[1]:
+        whitebar = np.ones((whitebar_size, img_size, 3))*255
+        new_img = np.concatenate((whitebar, img, whitebar), axis=0)
+
+    if new_img.shape[0] - new_img.shape[1] == 1:
+        new_img = np.concatenate((new_img, np.ones((img_size, 1, 3))*255), axis=1)
+
+    if new_img.shape[1] - new_img.shape[0] == 1:
+        new_img = np.concatenate((new_img, np.ones((1, img_size, 3))*255), axis=0)
+
+    return new_img
+
 
 def grouper(n, iterable, fillvalue=None):
     '''grouper(3, 'ABCDEFG', 'x') --> ABC DEF Gxx'''
@@ -31,11 +56,6 @@ def mosaic(w, imgs):
     rows = grouper(w, imgs, pad)
     return np.vstack(map(np.hstack, rows))
 
-from os import listdir
-from os.path import isfile, join
-shoes_path = 'shoes'
-image_files = [join(shoes_path, f) for f in listdir(shoes_path) if isfile(join(shoes_path, f))]
-
 
 def preprocess_plain(_image_files):
     processed_images = []
@@ -44,12 +64,12 @@ def preprocess_plain(_image_files):
         img = imread(image_file)
         img = preprocess.autocrop(img)
         img = preprocess.scale_max(img)
-
+        img = make_square(img)
         processed_images.append(img)
 
     mosaic_image = mosaic(len(processed_images), processed_images)
     # TODO cant remember the syntax
-    imwrite(mosaic_image, "out/super_simple.jpg")
+    imsave("out/before_processing.jpg", mosaic_image)
 
 
 def preprocess_super_simple(_image_files):
@@ -71,15 +91,27 @@ def preprocess_super_simple(_image_files):
 
     mosaic_image = mosaic(len(processed_images), processed_images)
     # TODO cant remember the syntax
-    imwrite(mosaic_image, "out/super_simple.jpg")
+    imsave("out/simple processing.jpg", mosaic_image)
 
+
+shoes_path = 'shoes'
+image_files = [join(shoes_path, f) for f in listdir(shoes_path) if isfile(join(shoes_path, f))]
 
 preprocess_plain(image_files)
-preprocess_super_simple(image_files)
+# preprocess_super_simple(image_files)
+# img = imread('/home/alessio/Desktop/shoe.jpg')
+#
+# img = preprocess.autocrop(img)
+# img = preprocess.blur(
+#     img, gaussian_blur={"enabled": True, "ksize_width": 5, "ksize_height": 5,
+#     "sigmaX": 0}
+# )
+# imshow(img)
+# img = preprocess.grey(img)
+# img = preprocess.bitwise(img)
+# img = preprocess.canny(img)
+# imshow(img)
 
-
-
-img = imread('/home/alessio/Desktop/shoe.jpg')
 # imshow(img)
 # img = img.convertTo(img, CV_32SC1)
 # img = preprocess.autocrop(img)
@@ -87,17 +119,6 @@ img = imread('/home/alessio/Desktop/shoe.jpg')
 #     img, gaussian_blur={"enabled": True, "ksize_width": 5, "ksize_height": 5,
 #     "sigmaX": 0}
 # )
-
-img = preprocess.autocrop(img)
-img = preprocess.blur(
-    img, gaussian_blur={"enabled": True, "ksize_width": 5, "ksize_height": 5,
-    "sigmaX": 0}
-)
-imshow(img)
-img = preprocess.grey(img)
-img = preprocess.bitwise(img)
-img = preprocess.canny(img)
-imshow(img)
 
 # descriptor = ZernikeDescriptor(
 #     preprocess=True,
