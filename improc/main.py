@@ -4,10 +4,12 @@ from os.path import isfile, join
 import itertools as it
 import numpy as np
 
-from scipy.ndimage import imread
-from scipy.misc import imshow
-# from cv2 import imread
-from scipy.misc import imsave
+from cv2 import waitKey
+from cv2 import imshow
+from cv2 import imread
+from cv2 import cvtColor
+from cv2 import COLOR_BGR2RGB
+from cv2 import imwrite
 
 import improc.features.preprocess as preprocess
 from improc.features.descriptor import ZernikeDescriptor
@@ -44,7 +46,6 @@ def preprocess_basic(_image_files):
         processed_images.append(img)
 
     mosaic_image = mosaic(len(processed_images), processed_images)
-    #imsave("out/before_processing.jpg", mosaic_image)
     return  mosaic_image
 
 
@@ -60,13 +61,25 @@ def preprocess_super_simple(_image_files):
             "sigmaX": 0}
         )
         img = preprocess.grey(img)
-        # img = preprocess.bitwise(img)
-        # img = preprocess.canny(img)
+        img = preprocess.bitwise(img)
+        img = preprocess.canny(img)
         processed_images.append(img)
 
     mosaic_image = mosaic(len(processed_images), processed_images)
-    #imsave("out/simple processing.jpg", mosaic_image)
     return mosaic_image
+
+
+def preprocess_zernike(_image_files):
+    descriptor = ZernikeDescriptor()
+    procesessed_images = []
+    for image_file in _image_files:
+        img = imread(image_file)
+        img = preprocess.autocrop(img)
+        img = descriptor.do_preprocess(img)
+        procesessed_images.append(img)
+        print img.shape
+    mosaic_images = mosaic(len(procesessed_images), procesessed_images)
+    return mosaic_images
 
 
 shoes_path = 'shoes'
@@ -74,51 +87,15 @@ image_files = [join(shoes_path, f) for f in listdir(shoes_path) if isfile(join(s
 
 original_imgs = preprocess.grey(preprocess_basic(image_files))  # made gray just to be shown with the others
 gray_imgs = preprocess_super_simple(image_files)
+zernike_images = preprocess_zernike(image_files)
 
-comparison = np.concatenate((original_imgs, gray_imgs), axis=0)
-imshow(comparison)
+print original_imgs.shape
+print gray_imgs.shape
+print zernike_images.shape
 
-imsave("out/comparison.jpg", comparison)
+comparison = np.concatenate((original_imgs, gray_imgs, zernike_images), axis=0)
+imshow("Descriptors comparison", comparison)
+waitKey(0)
 
-# img = imread('/home/alessio/Desktop/shoe.jpg')
-#
-# img = preprocess.autocrop(img)
-# img = preprocess.blur(
-#     img, gaussian_blur={"enabled": True, "ksize_width": 5, "ksize_height": 5,
-#     "sigmaX": 0}
-# )
-# imshow(img)
-# img = preprocess.grey(img)
-# img = preprocess.bitwise(img)
-# img = preprocess.canny(img)
-# imshow(img)
+imwrite("out/comparison.jpg", comparison)
 
-# imshow(img)
-# img = img.convertTo(img, CV_32SC1)
-# img = preprocess.autocrop(img)
-# img = preprocess.blur(
-#     img, gaussian_blur={"enabled": True, "ksize_width": 5, "ksize_height": 5,
-#     "sigmaX": 0}
-# )
-
-# descriptor = ZernikeDescriptor(
-#     preprocess=True,
-#     radius=84,
-#     resize={"enabled": False, "width": 250, "height": 250},
-#     grey={"enabled": True},
-#     autocrop={"enabled": True},
-#     outline_contour={"enabled": True},
-#     add_border={"enabled": True, "color_value": 0, "border_size": 15,
-#                 "fill_dimensions": True},
-#     bitwise_info={"enabled": True},
-#     thresh={"enabled": False},
-#     scale_max={"enabled": True, "width": 250, "height": 250},
-#     dilate={"enabled": True, "width": 7, "height": 7, "iterations": 1},
-#     closing={"enabled": True, "width": 5, "height": 5},
-#     canny={"enabled": True, "threshold1": 100, "threshold2": 200},
-#     gaussian_blur={"enabled": True, "ksize_width": 5, "ksize_height": 5,
-#                    "sigmaX": 0},
-#     laplacian={"enabled": False})
-#
-# img = descriptor.do_preprocess(img)
-# imshow(img)
