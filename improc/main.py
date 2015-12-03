@@ -12,7 +12,6 @@ from cv2 import waitKey
 from cv2 import imshow
 from cv2 import imread
 from cv2 import cvtColor
-from cv2 import COLOR_BGR2RGB
 from cv2 import imwrite
 
 import improc.features.preprocess as preprocess
