@@ -43,10 +43,11 @@ def preprocess_basic(_image_files):
         img = preprocess.autocrop(img)
         img = preprocess.scale_max(img)
         img = preprocess.make_square(img)
+        img = preprocess.grey(img)
         processed_images.append(img)
 
     mosaic_image = mosaic(len(processed_images), processed_images)
-    return  mosaic_image
+    return mosaic_image
 
 
 def preprocess_super_simple(_image_files):
@@ -62,7 +63,6 @@ def preprocess_super_simple(_image_files):
         )
         img = preprocess.grey(img)
         img = preprocess.bitwise(img)
-        img = preprocess.canny(img)
         processed_images.append(img)
 
     mosaic_image = mosaic(len(processed_images), processed_images)
@@ -74,28 +74,48 @@ def preprocess_zernike(_image_files):
     procesessed_images = []
     for image_file in _image_files:
         img = imread(image_file)
-        img = preprocess.autocrop(img)
         img = descriptor.do_preprocess(img)
         procesessed_images.append(img)
-        print img.shape
+
     mosaic_images = mosaic(len(procesessed_images), procesessed_images)
+    return mosaic_images
+
+
+def preprocess_negative(_image_files):
+    processed_images = []
+    for image_file in _image_files:
+        img = imread(image_file)
+        img = preprocess.autocrop(img)
+        img = preprocess.scale_max(img)
+        img = preprocess.make_square(img)
+        img = preprocess.grey(img)
+        img = preprocess.bitwise(img)
+        processed_images.append(img)
+    mosaic_images = mosaic((len(processed_images)), processed_images)
     return mosaic_images
 
 
 shoes_path = 'shoes'
 image_files = [join(shoes_path, f) for f in listdir(shoes_path) if isfile(join(shoes_path, f))]
 
-original_imgs = preprocess.grey(preprocess_basic(image_files))  # made gray just to be shown with the others
+# img = imread("/home/alessio/tensor/improc/shoes/1.jpg")
+# img = preprocess.grey(img)
+# img = preprocess.bitwise(img)
+# imshow("imshow",img)
+# waitKey(0)
+
+original_imgs = preprocess_basic(image_files)
 gray_imgs = preprocess_super_simple(image_files)
+reverse_imgs = preprocess_negative(image_files)
 zernike_images = preprocess_zernike(image_files)
 
-print original_imgs.shape
-print gray_imgs.shape
-print zernike_images.shape
+# print original_imgs.shape
+# print gray_imgs.shape
+# print zernike_images.shape
 
-comparison = np.concatenate((original_imgs, gray_imgs, zernike_images), axis=0)
+comparison = np.concatenate((original_imgs, gray_imgs, reverse_imgs, zernike_images), axis=0)
 imshow("Descriptors comparison", comparison)
 waitKey(0)
 
-imwrite("out/comparison.jpg", comparison)
+# imwrite("out/comparison.jpg", comparison)
 
