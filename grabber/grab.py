@@ -8,8 +8,26 @@ from cv2 import imdecode
 from cv2 import imwrite
 import requests
 import numpy as np
-
 import improc.features.preprocess as preprocess
+
+
+def image_raw_preprocessing(img_stream):
+    image_decoded = imdecode(np.fromstring(img_stream.content, np.uint8), flags=IMREAD_COLOR)
+    image_autocropped = preprocess.autocrop(image_decoded)
+    image_squared = None
+    if image_autocropped is not None:
+        image_scaled_max = preprocess.scale_max(image_autocropped)
+        image_squared = preprocess.make_square(image_scaled_max)
+    return image_squared
+
+
+def update_product(data, prd_id):
+    if any(data):
+            collection.update(
+                {"_id": prd_id},
+                {"$set": data},
+                upsert=False
+            )
 
 out_dir = 'out'
 
@@ -48,36 +66,23 @@ for prd_index, product in enumerate(products):
 
             if img_data.status_code == 200:
                 # image processing
-                try:
-                    image_decoded = imdecode(np.fromstring(img_data.content, np.uint8), flags=IMREAD_COLOR)
-                    image_autocropped = preprocess.autocrop(image_decoded)
-                    image_squared = None
-                    if image_autocropped is not None:
-                        image_scaled_max = preprocess.scale_max(image_autocropped)
-                        image_squared = preprocess.make_square(image_scaled_max)
-                        imshow("img", image_squared)
-                        imwrite(img_filename, image_squared)  # save image
-                        waitKey(0)
-                        img_status = "ok"
-                    else:
-                        img_status = "autocropped_failed"
-                        product_status = "failed"
+                processed_img = image_raw_preprocessing(img_data)
 
-                except AttributeError:
-                    print("Unable to process image " + str(img_index) + "/" + str(prd_index))
-                    continue
+                if processed_img is not None:
+                    imwrite(img_filename, processed_img)  # save image
+                    img_status = "ok"
+                else:
+                    img_status = "autocropped_failed"
+                    product_status = "failed"
 
             else:
                 img_status = "http_fail"
                 product_status = "failed"
                 print("Unable to retrieve image " + str(img_index) + "/" + str(prd_index))
-                continue
 
             set_data["images.%s.image_processed_status" % img_index] = img_status  # update img status
 
-        if any(set_data):
-            collection.update(
-                {"_id": product_id},
-                {"$set": set_data},
-                upsert=False
-            )
+        update_product(set_data, product_id)
+
+    set_data["processed_status"] = product_status  # update_product_status
+    update_product(set_data, product_id)
