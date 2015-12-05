@@ -15,6 +15,7 @@ def is_corrupted(stream):
     try:
         img = Image.open(StringIO(stream.content))
         check = img.verify()
+        del img
         return False
     except IOError:
         return True
@@ -23,10 +24,14 @@ def is_corrupted(stream):
 def image_raw_preprocessing(img_stream):
     image_squared = None
     image_decoded = imdecode(np.fromstring(img_stream.content, np.uint8), flags=IMREAD_COLOR)
-    image_autocropped = preprocess.autocrop(image_decoded)
-    if image_autocropped is not None:
-        image_scaled_max = preprocess.scale_max(image_autocropped)
-        image_squared = preprocess.make_square(image_scaled_max)
+    if image_decoded is not None:
+        try:
+            image_autocropped = preprocess.autocrop(image_decoded)
+        except AttributeError:
+            return image_squared
+        if image_autocropped is not None:
+            image_scaled_max = preprocess.scale_max(image_autocropped)
+            image_squared = preprocess.make_square(image_scaled_max)
     return image_squared
 
 
@@ -74,8 +79,12 @@ for prd_index, product in enumerate(products):
 
             if img_data.status_code == 200:
                 processed_img = None
+
                 if not is_corrupted(img_data):
                     processed_img = image_raw_preprocessing(img_data)
+                else:
+                    img_status = "image_corrupted"
+                    product_status = "failed"
 
                 if processed_img is not None:
                     imwrite(img_filename, processed_img)  # save image
