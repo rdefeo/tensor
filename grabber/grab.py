@@ -2,19 +2,28 @@ from os import mkdir
 from os import path
 from pymongo import MongoClient
 from cv2 import IMREAD_COLOR
-from cv2 import waitKey
-from cv2 import imshow
 from cv2 import imdecode
 from cv2 import imwrite
 import requests
 import numpy as np
 import improc.features.preprocess as preprocess
+from StringIO import StringIO
+from PIL import Image
+
+
+def is_corrupted(stream):
+    try:
+        img = Image.open(StringIO(stream.content))
+        check = img.verify()
+        return False
+    except IOError:
+        return True
 
 
 def image_raw_preprocessing(img_stream):
+    image_squared = None
     image_decoded = imdecode(np.fromstring(img_stream.content, np.uint8), flags=IMREAD_COLOR)
     image_autocropped = preprocess.autocrop(image_decoded)
-    image_squared = None
     if image_autocropped is not None:
         image_scaled_max = preprocess.scale_max(image_autocropped)
         image_squared = preprocess.make_square(image_scaled_max)
@@ -59,14 +68,14 @@ for prd_index, product in enumerate(products):
         img_id = img['_id']
         img_filename = out_dir + "/" + str(product_id) + "_" + str(img_id) + ".jpg"
 
-        if "image_processed_status" not in img:  # check previously processed img
+        if "image_processed_status" not in img:  # check if image already exist
 
-            # image fetch
-            img_data = requests.get(url, stream=True)
+            img_data = requests.get(url)
 
             if img_data.status_code == 200:
-                # image processing
-                processed_img = image_raw_preprocessing(img_data)
+                processed_img = None
+                if not is_corrupted(img_data):
+                    processed_img = image_raw_preprocessing(img_data)
 
                 if processed_img is not None:
                     imwrite(img_filename, processed_img)  # save image
