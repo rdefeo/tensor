@@ -47,14 +47,14 @@ out_dir = 'out'
 
 # Initializing MongoDB client
 client = MongoClient('localhost', 27017)
-test_db = client.jemboo_test
+test_db = client.jemboo
 collection = test_db.shoes
 
 if not(path.exists(out_dir)):
     mkdir(out_dir)
     print "Created output folder"
 
-products = collection.find()
+products = collection.find().batch_size(50)
 
 print "Downloading images..."
 print_interval = products.count()/20
@@ -63,56 +63,56 @@ num_processed_imgs = 0
 num_corrupted_imgs = 0
 num_failed_crop = 0
 
+while num_processed_imgs < 400000:
+    for prd_index, product in enumerate(products):
+        product_status = "ok"
+        product_id = product['_id']
 
-for prd_index, product in enumerate(products):
-    product_status = "ok"
-    product_id = product['_id']
+        if prd_index % print_interval == 0:
+            print(str(prd_index / print_interval * 4) + "% of products scanned")
 
-    if prd_index % print_interval == 0:
-        print(str(prd_index / print_interval * 4) + "% of products scanned")
+        set_data = {}
+        for img_index, img in enumerate(product['images']):
+            img_status = None
+            url = img['url']
+            img_id = img['_id']
+            img_filename = out_dir + "/" + str(product_id) + "_" + str(img_id) + ".jpg"
 
-    set_data = {}
-    for img_index, img in enumerate(product['images']):
-        img_status = None
-        url = img['url']
-        img_id = img['_id']
-        img_filename = out_dir + "/" + str(product_id) + "_" + str(img_id) + ".jpg"
+            if "image_processed_status" not in img:  # check if image already exist
 
-        if "image_processed_status" not in img:  # check if image already exist
+                img_data = requests.get(url, stream=True)
 
-            img_data = requests.get(url, stream=True)
+                if img_data.status_code == 200:
+                    processed_img = None
 
-            if img_data.status_code == 200:
-                processed_img = None
+                    if not is_corrupted(img_data):
+                        processed_img = image_raw_preprocessing(img_data)
+                    else:
+                        img_status = "image_corrupted"
+                        product_status = "failed"
+                        num_corrupted_imgs += 1
 
-                if not is_corrupted(img_data):
-                    processed_img = image_raw_preprocessing(img_data)
+                    if processed_img is not None:
+                        imwrite(img_filename, processed_img)  # save image
+                        img_status = "ok"
+                    else:
+                        img_status = "autocropped_failed"
+                        product_status = "failed"
+                        num_failed_crop += 1
+
                 else:
-                    img_status = "image_corrupted"
+                    img_status = "http_fail"
                     product_status = "failed"
-                    num_corrupted_imgs += 1
+                    print("Unable to retrieve image " + str(img_index) + "/" + str(prd_index))
 
-                if processed_img is not None:
-                    imwrite(img_filename, processed_img)  # save image
-                    img_status = "ok"
-                else:
-                    img_status = "autocropped_failed"
-                    product_status = "failed"
-                    num_failed_crop += 1
+                set_data["images.%s.image_processed_status" % img_index] = img_status  # update img status
 
-            else:
-                img_status = "http_fail"
-                product_status = "failed"
-                print("Unable to retrieve image " + str(img_index) + "/" + str(prd_index))
+            update_product(set_data, product_id)
+            num_processed_imgs += 1
 
-            set_data["images.%s.image_processed_status" % img_index] = img_status  # update img status
-
+        set_data["processed_status"] = product_status  # update_product_status
         update_product(set_data, product_id)
-        num_processed_imgs += 1
-
-    set_data["processed_status"] = product_status  # update_product_status
-    update_product(set_data, product_id)
-    num_processed_products += 1
+        num_processed_products += 1
 
 print "100% of products scanned\n"
 print "Total number of processed products: %i" % num_processed_products
