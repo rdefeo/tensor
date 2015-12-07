@@ -147,7 +147,7 @@ for prd_index, product in enumerate(products):
         product_id = product['_id']
 
         if prd_index % print_interval == 0:
-            print("\r" + str(prd_index / print_interval * 2) + "% of products scanned")
+            print(str(prd_index / print_interval * 2) + "% of products scanned")
 
         db_changes = {}
         for img_index, img_data in enumerate(product['images']):
