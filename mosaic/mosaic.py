@@ -1,7 +1,9 @@
+from collections import defaultdict
 from os import listdir
 from os.path import isfile, join, exists
 from sys import exit
 from pymongo import MongoClient
+from bson.objectid import ObjectId
 
 import numpy as np
 import itertools as it
@@ -10,16 +12,25 @@ from cv2 import waitKey
 from cv2 import imshow
 from cv2 import imread
 
-from orientations import orientations
 import improc.features.preprocess as preprocess
 import logging
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.ERROR)
+LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
 
 IMG_DIR = '../grabber/out'
-MAX_NUM_PRODUCTS = 100000
+MAX_NUM_ITERATIONS = 5
+MAX_NUM_IMG = 5000
+
+
+def chunk_list(seq, step):
+    out = []
+    last = 0.0
+    while len(seq) - last >= step:
+        out.append(seq[int(last):int(last + step)])
+        last += step
+    return out
 
 
 def grouper(n, iterable, fillvalue=None):
@@ -42,48 +53,43 @@ def mosaic(w, imgs):
     return np.vstack(map(np.hstack, rows))
 
 
-def get_img_file_path(img_id, path):
+def get_imgs_id(path):
+    ids = []
+    for i in listdir(path):
+        product_id = i[:24]
+        img_id = i[25:49]
+        ids.append((product_id, img_id))
+    return ids
 
+
+def retrieve_img(img_id, product_id):
+    db_products = collection.find({"_id": ObjectId(product_id)})
+    for db_product in db_products:
+        for db_img in db_product['images']:
+            if str(db_img['_id']) == img_id:
+                return db_img
+        return None
+
+
+def get_img_file_path(img_id, path):
     for i in listdir(path):
         if isfile(join(path, i)) and img_id in i:
             return join(path, i)
-        else:
-            return None
+    return None
 
 
 def get_imgs_block(img_ids, img_dir_path):
-
     images = []
-    for img_id in img_ids[-144:]:
+    for img_id in img_ids:
         image = get_img_file_path(img_id, img_dir_path)
         if image is not None:
             cvimage = imread(image)
-            imshow("sederino", imshow(cvimage))
             cvimage = preprocess.scale_max(cvimage, 100, 100)
             images.append(cvimage)
         else:
             logging.error("Image %s is missing. Database and download folder are inconsistent.", img_id)
-            return None
+            images.append(np.ones((100, 100)))
     return images
-
-imgs_by_orientation = {
-                        'SHOE_ORIENTATION_1': [],
-                        'SHOE_ORIENTATION_2': [],
-                        'SHOE_ORIENTATION_3': [],
-                        'SHOE_ORIENTATION_4': [],
-                        'SHOE_ORIENTATION_5': [],
-                        'SHOE_ORIENTATION_6': [],
-                        'SHOE_ORIENTATION_7': [],
-                        'SHOE_ORIENTATION_8': [],
-                        'SHOE_ORIENTATION_9': [],
-                        'SHOE_ORIENTATION_10': [],
-                        'SHOE_ORIENTATION_11': [],
-                        'SHOE_ORIENTATION_12': [],
-                        'SHOE_ORIENTATION_13': [],
-                        'SHOE_ORIENTATION_14': [],
-                        'SHOE_ORIENTATION_15': [],
-                        'INVALID_ORIENTATION': [],
-                        }
 
 
 # Initializing MongoDB client
@@ -95,30 +101,33 @@ if not (exists(IMG_DIR)) or listdir(IMG_DIR) == []:
     print "Image folder does not exist or is empty."
     exit()
 
-products = collection.find().batch_size(30)
-orientation_show_counter = 1
+imgs_by_orientation = defaultdict(list)
+local_imgs = get_imgs_id(IMG_DIR)
 
-for prd_index, product in enumerate(products):
-    for img_index, img in enumerate(product['images']):
+for (product, img) in local_imgs:
+    img_db = retrieve_img(img, product)
+    if img_db is not None:
+        if 'x' in img_db and 'y' in img_db and 'z' in img_db:
+            rpy = str(img_db['x']) + '_' + str(img_db['y']) + '_' + str(img_db['z'])
+            imgs_by_orientation[rpy].append(str(img))
+        else:
+            imgs_by_orientation['invalid_orientation'].append(str(img))
 
-        img_id = img['_id']
-        if 'image_processed_status' in img and img['image_processed_status'] == 'ok':
-            if 'x' in img and 'y' in img and 'z' in img:
-                rpy = str(img['x']) + '_' + str(img['y']) + '_' + str(img['z'])
-                orientation = orientations[rpy]
-                imgs_by_orientation[orientation].append(img_id)
+del local_imgs
 
-            else:
-                imgs_by_orientation['INVALID_ORIENTATION'].append(img_id)
+for orientation in imgs_by_orientation:
+    LOGGER.info("%s : %i", orientation, len(imgs_by_orientation[orientation]))
+    display_groups = chunk_list(imgs_by_orientation[orientation], 144)
+    imgs_by_orientation[orientation] = display_groups
 
-        current_orientation_show = 'SHOE_ORIENTATION_' + str(orientation_show_counter)
-        if (len(imgs_by_orientation[current_orientation_show]) % 144 == 0 and
-                len(imgs_by_orientation[current_orientation_show]) % 144 != 0):
-            imgs = get_imgs_block(imgs_by_orientation[current_orientation_show], IMG_DIR)
-            imgs_mosaic = mosaic(12, imgs)
-            imshow(current_orientation_show, imgs_mosaic)
-            waitKey(0)
-            if orientation_show_counter != 15:
-                orientation_show_counter += 1
-            else:
-                orientation_show_counter = 1
+iteration = 1
+while iteration <= MAX_NUM_ITERATIONS:
+    for orientation in imgs_by_orientation:
+        if iteration < len(imgs_by_orientation[orientation]):
+            imgs = get_imgs_block(imgs_by_orientation[orientation][iteration], IMG_DIR)
+            if imgs is not None:
+                imgs_mosaic = mosaic(12, imgs)
+                imshow(orientation, imgs_mosaic)
+                waitKey(0)
+    iteration += 1
+
