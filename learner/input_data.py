@@ -1,5 +1,5 @@
 from os import listdir
-from os.path import isfile, join, exists
+from os.path import isfile, join
 from pymongo import MongoClient
 import numpy as np
 from cv2 import imread
@@ -12,7 +12,6 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
 
-TRAINING_SET_DIR = '../grabber/out'
 IMG_SIZE = 100
 
 
@@ -30,6 +29,11 @@ def remove_dict_key(d, key):
 
 
 def get_imgs_id(path):
+    """Given a path, it returns a list of the ids of the
+       images present in the folder.
+    :param path: images directory.
+    :return:     list of images id.
+    """
     ids = []
     for i in listdir(path):
         product_id = i[:24]
@@ -39,6 +43,13 @@ def get_imgs_id(path):
 
 
 def retrieve_img_data_from_db(img_id, product_id, collection):
+    """Given a mongodb collection and product and image ids,
+       it returns the data associated with the queried img.
+    :param img_id:     id of the image.
+    :param product_id: id of the product the image belongs to.
+    :param collection: mongodb collection where to look for.
+    :return:           dictionary of img data from the db.
+    """
     db_products = collection.find({"_id": ObjectId(product_id)})
     for db_product in db_products:
         for db_img in db_product['images']:
@@ -48,6 +59,11 @@ def retrieve_img_data_from_db(img_id, product_id, collection):
 
 
 def get_img_file_path(img_id, path):
+    """
+    :param img_id: image id
+    :param path:   images directory
+    :return:       img filepath
+    """
     for i in listdir(path):
         if isfile(join(path, i)) and img_id in i:
             return join(path, i)
@@ -55,6 +71,11 @@ def get_img_file_path(img_id, path):
 
 
 def sort_imgs_in_path(path):
+    """Sort images id from a directory into a dictionary
+       by their orientation.
+    :param path: imgs directory.
+    :return:     sorted dictionary.
+    """
     imgs_by_rpy = defaultdict(list)
     local_imgs = get_imgs_id(path)
     coll = pymongo_init_working_collection()
@@ -71,6 +92,10 @@ def sort_imgs_in_path(path):
 
 
 def clean_set(sorted_images_dict):
+    """Delete some invalid orientations for a sorted image dictionary.
+    :param sorted_images_dict: dict to be cleaned.
+    :return: clean dict.
+    """
     sorted_images_dict = remove_dict_key(sorted_images_dict, '0_90_270')
     sorted_images_dict = remove_dict_key(sorted_images_dict, '0_0_315')
     sorted_images_dict = remove_dict_key(sorted_images_dict, 'invalid_orientation')
@@ -78,24 +103,41 @@ def clean_set(sorted_images_dict):
 
 
 def create_label_one_hot_mapping(sorted_dict):
+    """Automagically generates a dictionary that maps a
+       set of keys in a dictionary to a one-hot vector.
+    :param sorted_dict:
+    :return:
+    """
     mapping = defaultdict(lambda: np.ndarray((1, len(sorted_dict.keys()))))
     one_hot = np.zeros((1, len(sorted_dict.keys())))
     one_hot[0][-1] = 1
     for key in sorted_dict:
         one_hot = np.roll(one_hot, 1)
         mapping[key] = one_hot
-    print mapping
+    return mapping
 
 
 def acquire_img(img_id, path):
+    """Looks in a path for an img file given its id,
+       and applies a small preprocessing
+    :param img_id: img id.
+    :param path:   img directory.
+    :return:       processed cvimage (numpy array).
+    """
     img_path = get_img_file_path(img_id, path)
     img = imread(img_path)
     img_gray = preprocess.grey(img)
-    img_resized = preprocess.resize(img_gray, IMG_SIZE)
+    img_resized = preprocess.scale_max(img_gray, IMG_SIZE, IMG_SIZE)
     return img_resized
 
 
 def shuffle_in_unison(a, b):
+    """Shuffle two arrays along their first dimension
+       so that their relative order is kept unchanged.
+    :param a: 1st array.
+    :param b: 2nd array.
+    :return:  Shuffled arrays.
+    """
     assert len(a) == len(b)
     shuffled_a = np.empty(a.shape, dtype=a.dtype)
     shuffled_b = np.empty(b.shape, dtype=b.dtype)
@@ -107,21 +149,42 @@ def shuffle_in_unison(a, b):
 
 
 def from_dict_to_arrays(sorted_dict, path, mapping):
-    dataset_img = np.ndarray((IMG_SIZE, IMG_SIZE, 1))
-    dataset_label = np.ndarray((1, len(mapping.keys())))
+    """Transform a sorted dictionary in two consistently ordered arrays.
+       Each dictionary key ("label") is translated into a one-hot array
+       according to a mapping function.
+    :param sorted_dict: Dictionary to be processed ("label": "img_id").
+    :param path: Path where to search for img files ("img_id" is in their name).
+    :param mapping: Mapping function from label to one-hot vector.
+    :return: img and label dataset.
+    """
+    dataset_img = np.empty((0, IMG_SIZE, IMG_SIZE))
+    dataset_label = np.empty((0, len(mapping.keys())))
     for orientation, img_id in sorted_dict:
         img = acquire_img(img_id, path)
         label = mapping[orientation]
-        # TODO: check how to stack imgs and labels
+        dataset_img = np.append(dataset_img, img, axis=0)
+        dataset_label = np.append(dataset_label, label, axis=0)
+    return dataset_img, dataset_label
 
 
-def part_data(sorted_dict, test_percentage):
-    # TODO return 2 sets from 1
-    return sorted_dict
+def part_data(sorted_dict, boundary_percentage):
+    """Parts a dictionary of lists in two parts,
+       so that every element is similarly resized.
+    :param sorted_dict:         Dictionary to be parted.
+    :param boundary_percentage: Size of the left element expressed as
+                                percentage of the original dictionary.
+    :return: Right and left partition.
+    """
+    right_set = defaultdict(list)
+    left_set = defaultdict(list)
+    for key in sorted_dict:
+        right_set[key].append(sorted_dict[key][:(int(len(right_set[key]) * boundary_percentage / 100))])
+        left_set[key].append(sorted_dict[key][(int(len(left_set[key]) * boundary_percentage / 100)):])
+    return left_set, right_set
 
 
 class DataSet(object):
-    def __init__(self, images, labels, fake_data=False, one_hot=False):
+    def __init__(self, images, labels, fake_data=False):
         if fake_data:
             self._num_examples = 10000
         else:
@@ -183,41 +246,41 @@ class DataSet(object):
         return self._images[start:end], self._labels[start:end]
 
 
-# def read_data_sets(train_dir, fake_data=False, one_hot=False):
-#     class DataSets(object):
-#         pass
-#
-#     data_sets = DataSets()
-#
-#     if fake_data:
-#         data_sets.train = DataSet([], [], fake_data=True, one_hot=one_hot)
-#         data_sets.validation = DataSet([], [], fake_data=True, one_hot=one_hot)
-#         data_sets.test = DataSet([], [], fake_data=True, one_hot=one_hot)
-#         return data_sets
-#
-#     sorted_imgs = sort_imgs_in_path(train_dir)
-#
-#     VALIDATION_SIZE = 5000
-#
-#     local_file = maybe_download(TRAIN_IMAGES, train_dir)
-#     train_images = extract_images(local_file)
-#
-#     local_file = maybe_download(TRAIN_LABELS, train_dir)
-#     train_labels = extract_labels(local_file, one_hot=one_hot)
-#
-#     local_file = maybe_download(TEST_IMAGES, train_dir)
-#     test_images = extract_images(local_file)
-#
-#     local_file = maybe_download(TEST_LABELS, train_dir)
-#     test_labels = extract_labels(local_file, one_hot=one_hot)
-#
-#     validation_images = train_images[:VALIDATION_SIZE]
-#     validation_labels = train_labels[:VALIDATION_SIZE]
-#     train_images = train_images[VALIDATION_SIZE:]
-#     train_labels = train_labels[VALIDATION_SIZE:]
-#
-#     data_sets.train = DataSet(train_images, train_labels)
-#     data_sets.validation = DataSet(validation_images, validation_labels)
-#     data_sets.test = DataSet(test_images, test_labels)
-#
-#     return data_sets
+def read_data_sets(train_dir, test_percentage, validation_percentage, fake_data=False):
+    """Reads the images in a directory and sort them in three sets for ANN feeding.
+    :param train_dir: Data points images directory
+    :param test_percentage: Percentage of data points to be used exclusively for test
+    :param validation_percentage: Percentage of training data points to be used specifically for validation
+    :param fake_data: Set True if you need to initialize a dummy element
+    :return: Object that incorporates the three sets
+    """
+    class DataSets(object):
+        pass
+
+    data_sets = DataSets()
+
+    if fake_data:
+        data_sets.train = DataSet([], [], fake_data=True)
+        data_sets.validation = DataSet([], [], fake_data=True)
+        data_sets.test = DataSet([], [], fake_data=True)
+        return data_sets
+
+    sorted_imgs = sort_imgs_in_path(train_dir)
+    label_to_one_hot_map = create_label_one_hot_mapping(sorted_imgs)
+
+    test_dict, train_and_validation_dict = part_data(sorted_imgs, test_percentage)
+    validation_dict, train_dict = part_data(train_and_validation_dict, validation_percentage)
+
+    train_images, train_labels = from_dict_to_arrays(train_dict, train_dir, label_to_one_hot_map)
+    validation_images, validation_labels = from_dict_to_arrays(validation_dict, train_dir, label_to_one_hot_map)
+    test_images, test_labels = from_dict_to_arrays(test_dict, train_dir, label_to_one_hot_map)
+
+    train_images, train_labels = shuffle_in_unison(train_images, train_labels)
+    validation_images, validation_labels = shuffle_in_unison(validation_images, validation_labels)
+    test_images, test_labels = shuffle_in_unison(test_images, test_labels)
+
+    data_sets.train = DataSet(train_images, train_labels)
+    data_sets.validation = DataSet(validation_images, validation_labels)
+    data_sets.test = DataSet(test_images, test_labels)
+
+    return data_sets
