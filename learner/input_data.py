@@ -159,11 +159,12 @@ def from_dict_to_arrays(sorted_dict, path, mapping):
     """
     dataset_img = np.empty((0, IMG_SIZE, IMG_SIZE))
     dataset_label = np.empty((0, len(mapping.keys())))
-    for orientation, img_id in sorted_dict:
-        img = acquire_img(img_id, path)
-        label = mapping[orientation]
-        dataset_img = np.append(dataset_img, img, axis=0)
-        dataset_label = np.append(dataset_label, label, axis=0)
+    for orientation, img_list in sorted_dict.iteritems():
+        for img_id in img_list:
+            img = acquire_img(img_id, path)
+            label = mapping[orientation]
+            dataset_img = np.append(dataset_img, img, axis=0)
+            dataset_label = np.append(dataset_label, label, axis=0)
     return dataset_img, dataset_label
 
 
@@ -178,8 +179,8 @@ def part_data(sorted_dict, boundary_percentage):
     right_set = defaultdict(list)
     left_set = defaultdict(list)
     for key in sorted_dict:
-        right_set[key].append(sorted_dict[key][:(int(len(right_set[key]) * boundary_percentage / 100))])
-        left_set[key].append(sorted_dict[key][(int(len(left_set[key]) * boundary_percentage / 100)):])
+        right_set[key].append(sorted_dict[key][:(int(len(sorted_dict[key]) * boundary_percentage / 100))])
+        left_set[key].append(sorted_dict[key][(int(len(sorted_dict[key]) * boundary_percentage / 100)):])
     return left_set, right_set
 
 
@@ -265,19 +266,23 @@ def read_data_sets(train_dir, test_percentage, validation_percentage, fake_data=
         data_sets.test = DataSet([], [], fake_data=True)
         return data_sets
 
+    LOGGER.info("Sorting imgs in training set folder...")
     sorted_imgs = sort_imgs_in_path(train_dir)
-    label_to_one_hot_map = create_label_one_hot_mapping(sorted_imgs)
+    sorted_imgs = clean_set(sorted_imgs)
 
+    LOGGER.info("Partitioning data into training, validation and test groups...")
+    label_to_one_hot_map = create_label_one_hot_mapping(sorted_imgs)
     test_dict, train_and_validation_dict = part_data(sorted_imgs, test_percentage)
     validation_dict, train_dict = part_data(train_and_validation_dict, validation_percentage)
-
+    LOGGER.info("Retrieving and processing images...")
     train_images, train_labels = from_dict_to_arrays(train_dict, train_dir, label_to_one_hot_map)
     validation_images, validation_labels = from_dict_to_arrays(validation_dict, train_dir, label_to_one_hot_map)
     test_images, test_labels = from_dict_to_arrays(test_dict, train_dir, label_to_one_hot_map)
-
+    LOGGER.info("Shuffling all data...")
     train_images, train_labels = shuffle_in_unison(train_images, train_labels)
     validation_images, validation_labels = shuffle_in_unison(validation_images, validation_labels)
     test_images, test_labels = shuffle_in_unison(test_images, test_labels)
+    LOGGER.info("Datasets ready.")
 
     data_sets.train = DataSet(train_images, train_labels)
     data_sets.validation = DataSet(validation_images, validation_labels)
