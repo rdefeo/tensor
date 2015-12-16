@@ -179,8 +179,8 @@ def part_data(sorted_dict, boundary_percentage):
     right_set = defaultdict(list)
     left_set = defaultdict(list)
     for key in sorted_dict:
-        right_set[key].append(sorted_dict[key][:(int(len(sorted_dict[key]) * boundary_percentage / 100))])
-        left_set[key].append(sorted_dict[key][(int(len(sorted_dict[key]) * boundary_percentage / 100)):])
+        right_set[key] = sorted_dict[key][:(int(len(sorted_dict[key]) * boundary_percentage / 100))]
+        left_set[key] = sorted_dict[key][(int(len(sorted_dict[key]) * boundary_percentage / 100)):]
     return left_set, right_set
 
 
