@@ -28,6 +28,13 @@ def remove_dict_key(d, key):
     return r
 
 
+def get_dict_size(sorted_dict):
+    size = 0
+    for key in sorted_dict:
+        size += len(sorted_dict[key])
+    return size
+
+
 def get_imgs_id(path):
     """Given a path, it returns a list of the ids of the
        images present in the folder.
@@ -128,7 +135,8 @@ def acquire_img(img_id, path):
     img = imread(img_path)
     img_gray = preprocess.grey(img)
     img_resized = preprocess.scale_max(img_gray, IMG_SIZE, IMG_SIZE)
-    return img_resized
+    img_reshaped = np.reshape(img_resized, (1, 100, 100))
+    return img_reshaped
 
 
 def shuffle_in_unison(a, b):
@@ -179,8 +187,8 @@ def part_data(sorted_dict, boundary_percentage):
     right_set = defaultdict(list)
     left_set = defaultdict(list)
     for key in sorted_dict:
-        right_set[key] = sorted_dict[key][:(int(len(sorted_dict[key]) * boundary_percentage / 100))]
-        left_set[key] = sorted_dict[key][(int(len(sorted_dict[key]) * boundary_percentage / 100)):]
+        left_set[key] = sorted_dict[key][:(int(len(sorted_dict[key]) * boundary_percentage / 100))]
+        right_set[key] = sorted_dict[key][(int(len(sorted_dict[key]) * boundary_percentage / 100)):]
     return left_set, right_set
 
 
@@ -274,9 +282,12 @@ def read_data_sets(train_dir, test_percentage, validation_percentage, fake_data=
     label_to_one_hot_map = create_label_one_hot_mapping(sorted_imgs)
     test_dict, train_and_validation_dict = part_data(sorted_imgs, test_percentage)
     validation_dict, train_dict = part_data(train_and_validation_dict, validation_percentage)
-    LOGGER.info("Retrieving and processing images...")
+    del train_and_validation_dict
+    LOGGER.info("Retrieving and processing train images...")
     train_images, train_labels = from_dict_to_arrays(train_dict, train_dir, label_to_one_hot_map)
+    LOGGER.info("Retrieving and processing validation images...")
     validation_images, validation_labels = from_dict_to_arrays(validation_dict, train_dir, label_to_one_hot_map)
+    LOGGER.info("Retrieving and processing test images...")
     test_images, test_labels = from_dict_to_arrays(test_dict, train_dir, label_to_one_hot_map)
     LOGGER.info("Shuffling all data...")
     train_images, train_labels = shuffle_in_unison(train_images, train_labels)
