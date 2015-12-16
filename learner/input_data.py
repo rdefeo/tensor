@@ -36,10 +36,16 @@ def get_dict_size(sorted_dict):
 
 
 def get_imgs_id(path):
-    """Given a path, it returns a list of the ids of the
-       images present in the folder.
-    :param path: images directory.
-    :return:     list of images id.
+    """Gets the images ids.
+
+    Given a path, it returns a list of the
+    id of the images present in the folder.
+
+    Args:
+        path (str): images directory
+
+    Returns:
+        list: list of images ids
     """
     ids = []
     for i in listdir(path):
@@ -50,12 +56,18 @@ def get_imgs_id(path):
 
 
 def retrieve_img_data_from_db(img_id, product_id, collection):
-    """Given a mongodb collection and product and image ids,
-       it returns the data associated with the queried img.
-    :param img_id:     id of the image.
-    :param product_id: id of the product the image belongs to.
-    :param collection: mongodb collection where to look for.
-    :return:           dictionary of img data from the db.
+    """Retrieve img data from db.
+
+    Given a mongodb collection and product and image ids,
+    it returns the data associated with the queried img.
+
+    Args:
+        img_id (str): id of the image
+        product_id (str): mongodb collection where to look for
+        collection (pymongo.collection): dictionary of img data from the db
+
+    Returns:
+        dict: img data stored in the db
     """
     db_products = collection.find({"_id": ObjectId(product_id)})
     for db_product in db_products:
@@ -67,9 +79,12 @@ def retrieve_img_data_from_db(img_id, product_id, collection):
 
 def get_img_file_path(img_id, path):
     """
-    :param img_id: image id
-    :param path:   images directory
-    :return:       img filepath
+    Args:
+        img_id (str): image id
+        path (str): img filepath
+
+    Returns:
+        str: img filepath
     """
     for i in listdir(path):
         if isfile(join(path, i)) and img_id in i:
@@ -78,10 +93,17 @@ def get_img_file_path(img_id, path):
 
 
 def sort_imgs_in_path(path):
-    """Sort images id from a directory into a dictionary
-       by their orientation.
-    :param path: imgs directory.
-    :return:     sorted dictionary.
+    """Sort images by orientation.
+
+    Images in a folder are sorted by their orientation.
+    It returns a dictionary whose keys are defined as:
+    "roll_pitch_yaw".
+
+    Args:
+        path (str): imgs directory
+
+    Returns:
+        dict: dictionary of imgs sorted by orientation
     """
     imgs_by_rpy = defaultdict(list)
     local_imgs = get_imgs_id(path)
@@ -99,9 +121,13 @@ def sort_imgs_in_path(path):
 
 
 def clean_set(sorted_images_dict):
-    """Delete some invalid orientations for a sorted image dictionary.
-    :param sorted_images_dict: dict to be cleaned.
-    :return: clean dict.
+    """Delete unwanted orientations from a dict.
+
+    Args:
+        sorted_images_dict (dict):
+
+    Returns:
+        dict: cleaned dictionary
     """
     sorted_images_dict = remove_dict_key(sorted_images_dict, '0_90_270')
     sorted_images_dict = remove_dict_key(sorted_images_dict, '0_0_315')
@@ -110,10 +136,19 @@ def clean_set(sorted_images_dict):
 
 
 def create_label_one_hot_mapping(sorted_dict):
-    """Automagically generates a dictionary that maps a
-       set of keys in a dictionary to a one-hot vector.
-    :param sorted_dict:
-    :return:
+    """Generates a mapping from labels to one-hot vectors.
+
+    Automagically generates a dictionary that maps a
+    set of keys in a dictionary to a one-hot vector.
+
+    Example:
+        mapping["roll_pitch_yaw"] = [1, 0, 0, 0, 0]
+
+    Args:
+        sorted_dict (dict): dict of images sorted by orientation
+
+    Returns:
+        dict: dict that maps each key into a one-hot vector
     """
     mapping = defaultdict(lambda: np.ndarray((1, len(sorted_dict.keys()))))
     one_hot = np.zeros((1, len(sorted_dict.keys())))
@@ -125,11 +160,17 @@ def create_label_one_hot_mapping(sorted_dict):
 
 
 def acquire_img(img_id, path):
-    """Looks in a path for an img file given its id,
-       and applies a small preprocessing
-    :param img_id: img id.
-    :param path:   img directory.
-    :return:       processed cvimage (numpy array).
+    """Retrieve and process img from folder.
+
+    Retrieve image from folder, scale it, applies
+    grayscale, and reshape it to (1, 100, 100)
+
+    Args:
+        img_id (str):
+        path (str):
+
+    Returns:
+        numpy.array: img array
     """
     img_path = get_img_file_path(img_id, path)
     img = imread(img_path)
@@ -140,11 +181,15 @@ def acquire_img(img_id, path):
 
 
 def shuffle_in_unison(a, b):
-    """Shuffle two arrays along their first dimension
-       so that their relative order is kept unchanged.
-    :param a: 1st array.
-    :param b: 2nd array.
-    :return:  Shuffled arrays.
+    """Shuffles two arrays maintaining relative ordering.
+
+    Args:
+        a (numpy.array): 1st array
+        b (numpy.array): 2nd array
+
+    Returns:
+        numpy.array: 1st shuffled array
+        numpy.array: 2nd shuffled array
     """
     assert len(a) == len(b)
     shuffled_a = np.empty(a.shape, dtype=a.dtype)
@@ -157,13 +202,20 @@ def shuffle_in_unison(a, b):
 
 
 def from_dict_to_arrays(sorted_dict, path, mapping):
-    """Transform a sorted dictionary in two consistently ordered arrays.
-       Each dictionary key ("label") is translated into a one-hot array
-       according to a mapping function.
-    :param sorted_dict: Dictionary to be processed ("label": "img_id").
-    :param path: Path where to search for img files ("img_id" is in their name).
-    :param mapping: Mapping function from label to one-hot vector.
-    :return: img and label dataset.
+    """Generates arrays to be fed to the net.
+
+    Transform a sorted dictionary in two consistently ordered arrays.
+    Each dictionary key ("label") is translated into a one-hot array
+    according to a mapping function.
+
+    Args:
+        sorted_dict (dict): dict of img id sorted by orientation
+        path (str): img files path
+        mapping (dict): dict mapping orientations to one-hot vectors
+
+    Returns:
+        array: images array
+        array: labels array
     """
     dataset_img = np.empty((0, IMG_SIZE, IMG_SIZE))
     dataset_label = np.empty((0, len(mapping.keys())))
@@ -177,12 +229,20 @@ def from_dict_to_arrays(sorted_dict, path, mapping):
 
 
 def part_data(sorted_dict, boundary_percentage):
-    """Parts a dictionary of lists in two parts,
-       so that every element is similarly resized.
-    :param sorted_dict:         Dictionary to be parted.
-    :param boundary_percentage: Size of the left element expressed as
-                                percentage of the original dictionary.
-    :return: Right and left partition.
+    """Parts lists belonging to a dict.
+
+    Each list is parted in two. "boundary percentage" specify
+    the size of the first list compared to the original one.
+    Two dict are returned, one containing all right hand lists
+    and one containing all left hand ones.
+
+    Args:
+        sorted_dict (dict):
+        boundary_percentage (float):
+
+    Returns:
+        dict: dict right hand lists
+        dict: dict left hand lists
     """
     right_set = defaultdict(list)
     left_set = defaultdict(list)
