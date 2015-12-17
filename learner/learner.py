@@ -1,4 +1,4 @@
-from os import listdir
+from os import listdir, mkdir
 import input_data
 from os.path import exists
 import logging
@@ -9,6 +9,9 @@ LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
 
 TRAINING_SET_DIR = '../grabber/out'
+TEMP_DATASET_DIR = 'out'
+
+RECORDED_SESSION = False
 
 
 def weight_variable(shape):
@@ -32,11 +35,30 @@ def max_pool_2x2(x):
 
 # Script start
 
-if not (exists(TRAINING_SET_DIR)) or listdir(TRAINING_SET_DIR) == []:
-    print "Training set folder does not exist or is empty."
-    exit()
+dataset = input_data.DataSets()
 
-dataset = input_data.read_data_sets(TRAINING_SET_DIR, 20, 20)
+if not RECORDED_SESSION:
+    if not (exists(TRAINING_SET_DIR)) or listdir(TRAINING_SET_DIR) == []:
+        print "Training set folder does not exist or is empty."
+        exit()
+
+    dataset = input_data.read_data_sets(TRAINING_SET_DIR, 20, 20)
+
+    # Save datasets
+
+    if not (exists(TEMP_DATASET_DIR)):
+        mkdir(TEMP_DATASET_DIR)
+        print "Created output folder"
+
+    input_data.save_dataset_array_to_file(dataset.train, TEMP_DATASET_DIR + "/train_set")
+    input_data.save_dataset_array_to_file(dataset.validation, TEMP_DATASET_DIR + "/validation")
+    input_data.save_dataset_array_to_file(dataset.test, TEMP_DATASET_DIR + "/test")
+
+else:
+
+    dataset.train = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/train_set")
+    dataset.validation = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/validation")
+    dataset.test = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/test")
 
 sess = tf.InteractiveSession()
 

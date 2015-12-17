@@ -259,8 +259,13 @@ def part_data(sorted_dict, boundary_percentage):
     return left_set, right_set
 
 
-# def save_dataset_array_to_file(filename):
-#     outfile = TemporaryFile()
+def save_dataset_array_to_file(dataset, destination):
+    np.save(destination, dataset)
+
+
+def load_dataset_from_file(source):
+    dataset = np.load(source)
+    return dataset
 
 
 class DataSet(object):
@@ -326,6 +331,10 @@ class DataSet(object):
         return self._images[start:end], self._labels[start:end]
 
 
+class DataSets(object):
+        pass
+
+
 def read_data_sets(train_dir, test_percentage, validation_percentage, fake_data=False):
     """Reads the images in a directory and sort them in three sets for ANN feeding.
 
@@ -338,8 +347,6 @@ def read_data_sets(train_dir, test_percentage, validation_percentage, fake_data=
     Returns:
         DataSets: Incorporates training, validation and test set
     """
-    class DataSets(object):
-        pass
 
     data_sets = DataSets()
 
