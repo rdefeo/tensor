@@ -8,6 +8,7 @@ from collections import defaultdict
 from bson.objectid import ObjectId
 import improc.features.preprocess as preprocess
 
+
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
@@ -217,14 +218,20 @@ def from_dict_to_arrays(sorted_dict, path, mapping):
         array: images array
         array: labels array
     """
-    dataset_img = np.empty((0, IMG_SIZE, IMG_SIZE))
-    dataset_label = np.empty((0, len(mapping.keys())))
-    for orientation, img_list in sorted_dict.iteritems():
-        for img_id in img_list:
-            img = acquire_img(img_id, path)
-            label = mapping[orientation]
-            dataset_img = np.append(dataset_img, img, axis=0)
-            dataset_label = np.append(dataset_label, label, axis=0)
+    i = 0
+    dataset_size = get_dict_size(sorted_dict)
+    dataset_img = np.empty((dataset_size, IMG_SIZE, IMG_SIZE))
+    dataset_label = np.empty((dataset_size, len(mapping.keys())))
+    for individual in xrange(dataset_size):
+        for orientation, img_list in sorted_dict.iteritems():
+            for img_id in img_list:
+                img = acquire_img(img_id, path)
+                label = mapping[orientation]
+                dataset_img[individual] = img
+                dataset_label[individual] = label
+                i += 1
+                if i % 100 == 0:
+                    print i
     return dataset_img, dataset_label
 
 
@@ -250,6 +257,10 @@ def part_data(sorted_dict, boundary_percentage):
         left_set[key] = sorted_dict[key][:(int(len(sorted_dict[key]) * boundary_percentage / 100))]
         right_set[key] = sorted_dict[key][(int(len(sorted_dict[key]) * boundary_percentage / 100)):]
     return left_set, right_set
+
+
+# def save_dataset_array_to_file(filename):
+#     outfile = TemporaryFile()
 
 
 class DataSet(object):
@@ -317,11 +328,15 @@ class DataSet(object):
 
 def read_data_sets(train_dir, test_percentage, validation_percentage, fake_data=False):
     """Reads the images in a directory and sort them in three sets for ANN feeding.
-    :param train_dir: Data points images directory
-    :param test_percentage: Percentage of data points to be used exclusively for test
-    :param validation_percentage: Percentage of training data points to be used specifically for validation
-    :param fake_data: Set True if you need to initialize a dummy element
-    :return: Object that incorporates the three sets
+
+    Args:
+        train_dir (str): Data points images directory
+        test_percentage (float): Percentage of data points to be used exclusively for test
+        validation_percentage (float): Percentage of training data points to be used specifically for validation
+        fake_data (bool): True if you need to initialize a dummy element
+
+    Returns:
+        DataSets: Incorporates training, validation and test set
     """
     class DataSets(object):
         pass
