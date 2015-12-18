@@ -36,7 +36,7 @@ def get_dict_size(sorted_dict):
     return size
 
 
-def get_imgs_id(path):
+def get_imgs_id(path, max_num_imgs=-1):
     """Gets the images ids.
 
     Given a path, it returns a list of the
@@ -44,12 +44,17 @@ def get_imgs_id(path):
 
     Args:
         path (str): images directory
+        max_num_imgs (int): maximum number of images to process,
+                            negative value implies unlimited imgs.
 
     Returns:
         list: list of images ids
     """
     ids = []
-    for i in listdir(path):
+    id_list = listdir(path)
+    if max_num_imgs > 0:
+        id_list = id_list[:max_num_imgs]
+    for i in id_list:
         product_id = i[:24]
         img_id = i[25:49]
         ids.append((product_id, img_id))
@@ -93,7 +98,7 @@ def get_img_file_path(img_id, path):
     return None
 
 
-def sort_imgs_in_path(path):
+def sort_imgs_in_path(path, max_num_imgs=-1):
     """Sort images by orientation.
 
     Images in a folder are sorted by their orientation.
@@ -102,12 +107,14 @@ def sort_imgs_in_path(path):
 
     Args:
         path (str): imgs directory
+        max_num_imgs (int): maximum number of images to process,
+                            negative values implies unlimited imgs.
 
     Returns:
         dict: dictionary of imgs sorted by orientation
     """
     imgs_by_rpy = defaultdict(list)
-    local_imgs = get_imgs_id(path)
+    local_imgs = get_imgs_id(path, max_num_imgs)
     coll = pymongo_init_working_collection()
 
     for (product, img) in local_imgs:
@@ -130,9 +137,12 @@ def clean_set(sorted_images_dict):
     Returns:
         dict: cleaned dictionary
     """
-    sorted_images_dict = remove_dict_key(sorted_images_dict, '0_90_270')
-    sorted_images_dict = remove_dict_key(sorted_images_dict, '0_0_315')
-    sorted_images_dict = remove_dict_key(sorted_images_dict, 'invalid_orientation')
+    try:
+        sorted_images_dict = remove_dict_key(sorted_images_dict, '0_90_270')
+        sorted_images_dict = remove_dict_key(sorted_images_dict, '0_0_315')
+        sorted_images_dict = remove_dict_key(sorted_images_dict, 'invalid_orientation')
+    except KeyError as e:
+        LOGGER.warning('Orientation not found while cleaning dataset from invalid orientations:' + str(e))
     return sorted_images_dict
 
 
@@ -218,20 +228,17 @@ def from_dict_to_arrays(sorted_dict, path, mapping):
         array: images array
         array: labels array
     """
-    i = 0
     dataset_size = get_dict_size(sorted_dict)
     dataset_img = np.empty((dataset_size, IMG_SIZE, IMG_SIZE))
     dataset_label = np.empty((dataset_size, len(mapping.keys())))
-    for individual in xrange(dataset_size):
-        for orientation, img_list in sorted_dict.iteritems():
-            for img_id in img_list:
-                img = acquire_img(img_id, path)
-                label = mapping[orientation]
-                dataset_img[individual] = img
-                dataset_label[individual] = label
-                i += 1
-                if i % 100 == 0:
-                    print i
+    individual = 0
+    for orientation, img_list in sorted_dict.iteritems():
+        for img_id in img_list:
+            img = acquire_img(img_id, path)
+            label = mapping[orientation]
+            dataset_img[individual] = img
+            dataset_label[individual] = label
+            individual += 1
     return dataset_img, dataset_label
 
 
@@ -335,7 +342,7 @@ class DataSets(object):
         pass
 
 
-def read_data_sets(train_dir, test_percentage, validation_percentage, fake_data=False):
+def read_data_sets(train_dir, test_percentage, validation_percentage, max_num_imgs=-1, fake_data=False):
     """Reads the images in a directory and sort them in three sets for ANN feeding.
 
     Args:
@@ -343,6 +350,7 @@ def read_data_sets(train_dir, test_percentage, validation_percentage, fake_data=
         test_percentage (float): Percentage of data points to be used exclusively for test
         validation_percentage (float): Percentage of training data points to be used specifically for validation
         fake_data (bool): True if you need to initialize a dummy element
+        max_num_imgs (int): maximum number of images to process, negative values implies no boud.
 
     Returns:
         DataSets: Incorporates training, validation and test set
@@ -357,7 +365,7 @@ def read_data_sets(train_dir, test_percentage, validation_percentage, fake_data=
         return data_sets
 
     LOGGER.info("Sorting imgs in training set folder...")
-    sorted_imgs = sort_imgs_in_path(train_dir)
+    sorted_imgs = sort_imgs_in_path(train_dir, max_num_imgs)
     sorted_imgs = clean_set(sorted_imgs)
 
     LOGGER.info("Partitioning data into training, validation and test groups...")

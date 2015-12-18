@@ -10,7 +10,7 @@ logging.info('Starting logger for image grabber.')
 
 TRAINING_SET_DIR = '../grabber/out'
 TEMP_DATASET_DIR = 'out'
-
+MAXIMUM_NUM_IMGS = 1000 # negative to disable
 RECORDED_SESSION = False
 
 
@@ -38,11 +38,14 @@ def max_pool_2x2(x):
 dataset = input_data.DataSets()
 
 if not RECORDED_SESSION:
+    LOGGER.info('New session started. Processing directory: "%s"', TRAINING_SET_DIR)
     if not (exists(TRAINING_SET_DIR)) or listdir(TRAINING_SET_DIR) == []:
         print "Training set folder does not exist or is empty."
         exit()
 
-    dataset = input_data.read_data_sets(TRAINING_SET_DIR, 20, 20)
+    if MAXIMUM_NUM_IMGS <= 0:
+        LOGGER.info("Selected maximum images sample size %i", MAXIMUM_NUM_IMGS)
+    dataset = input_data.read_data_sets(TRAINING_SET_DIR, 20, 20, MAXIMUM_NUM_IMGS)
 
     # Save datasets
 
@@ -55,7 +58,7 @@ if not RECORDED_SESSION:
     input_data.save_dataset_array_to_file(dataset.test, TEMP_DATASET_DIR + "/test")
 
 else:
-
+    LOGGER.info('Recorded session option selected. Loading arrays in %s', TEMP_DATASET_DIR)
     dataset.train = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/train_set")
     dataset.validation = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/validation")
     dataset.test = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/test")
