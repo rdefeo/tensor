@@ -14,6 +14,9 @@ LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
 
 IMG_SIZE = 100
+FORBIDDEN_ORIENTATIONS = ['0_90_270',
+                          '0_0_315',
+                          'invalid_orientation']
 
 
 def pymongo_init_working_collection():
@@ -128,21 +131,21 @@ def sort_imgs_in_path(path, max_num_imgs=-1):
     return imgs_by_rpy
 
 
-def clean_set(sorted_images_dict):
+def clean_set(sorted_images_dict, forbidden_orientation_list):
     """Delete unwanted orientations from a dict.
 
     Args:
         sorted_images_dict (dict):
+        forbidden_orientation_list (list): list of forbidden orientations (keys)
 
     Returns:
         dict: cleaned dictionary
     """
-    try:
-        sorted_images_dict = remove_dict_key(sorted_images_dict, '0_90_270')
-        sorted_images_dict = remove_dict_key(sorted_images_dict, '0_0_315')
-        sorted_images_dict = remove_dict_key(sorted_images_dict, 'invalid_orientation')
-    except KeyError as e:
-        LOGGER.warning('Orientation not found while cleaning dataset from invalid orientations:' + str(e))
+    for orientation in forbidden_orientation_list:
+        try:
+            sorted_images_dict = remove_dict_key(sorted_images_dict, orientation)
+        except KeyError as e:
+            LOGGER.warning('Orientation not found while cleaning dataset from invalid orientations:' + str(e))
     return sorted_images_dict
 
 
@@ -286,7 +289,7 @@ class DataSet(object):
             self._num_examples = images.shape[0]
             # Convert shape from [num examples, rows, columns, depth]
             # to [num examples, rows*columns] (assuming depth == 1)
-            assert images.shape[3] == 1
+            assert len(images.shape) == 3
             images = images.reshape(images.shape[0],
                                     images.shape[1] * images.shape[2])
             # Convert from [0, 255] -> [0.0, 1.0].
@@ -366,7 +369,7 @@ def read_data_sets(train_dir, test_percentage, validation_percentage, max_num_im
 
     LOGGER.info("Sorting imgs in training set folder...")
     sorted_imgs = sort_imgs_in_path(train_dir, max_num_imgs)
-    sorted_imgs = clean_set(sorted_imgs)
+    sorted_imgs = clean_set(sorted_imgs, FORBIDDEN_ORIENTATIONS)
 
     LOGGER.info("Partitioning data into training, validation and test groups...")
     label_to_one_hot_map = create_label_one_hot_mapping(sorted_imgs)
@@ -379,7 +382,7 @@ def read_data_sets(train_dir, test_percentage, validation_percentage, max_num_im
     validation_images, validation_labels = from_dict_to_arrays(validation_dict, train_dir, label_to_one_hot_map)
     LOGGER.info("Retrieving and processing %i test images...", get_dict_size(test_dict))
     test_images, test_labels = from_dict_to_arrays(test_dict, train_dir, label_to_one_hot_map)
-    LOGGER.info("Shuffling all data...")
+    LOGGER.info("Shuffling datsets...")
     train_images, train_labels = shuffle_in_unison(train_images, train_labels)
     validation_images, validation_labels = shuffle_in_unison(validation_images, validation_labels)
     test_images, test_labels = shuffle_in_unison(test_images, test_labels)

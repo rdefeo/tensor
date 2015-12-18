@@ -10,8 +10,10 @@ logging.info('Starting logger for image grabber.')
 
 TRAINING_SET_DIR = '../grabber/out'
 TEMP_DATASET_DIR = 'out'
-MAXIMUM_NUM_IMGS = 1000 # negative to disable
-RECORDED_SESSION = False
+# Set negative to disable, number of images to browse, actual number of images in
+# datasets will be lower depending on FORBIDDEN_ORIENTATIONS defined in input_data.py
+MAXIMUM_NUM_IMGS = 1200
+RECORDED_SESSION = True
 
 
 def weight_variable(shape):
@@ -58,10 +60,11 @@ if not RECORDED_SESSION:
     input_data.save_dataset_array_to_file(dataset.test, TEMP_DATASET_DIR + "/test")
 
 else:
-    LOGGER.info('Recorded session option selected. Loading arrays in %s', TEMP_DATASET_DIR)
-    dataset.train = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/train_set")
-    dataset.validation = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/validation")
-    dataset.test = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/test")
+    LOGGER.info('Recorded session option selected. Loading arrays in folder %s', TEMP_DATASET_DIR)
+    dataset.train = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/train_set.npy")
+    dataset.validation = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/validation.npy")
+    dataset.test = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/test.npy")
+    LOGGER.info('Dataset loading complete')
 
 sess = tf.InteractiveSession()
 
