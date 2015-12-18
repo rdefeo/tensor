@@ -4,6 +4,7 @@ from pymongo import MongoClient
 import numpy as np
 from cv2 import imread
 import logging
+import cPickle
 from collections import defaultdict
 from bson.objectid import ObjectId
 import improc.features.preprocess as preprocess
@@ -269,15 +270,6 @@ def part_data(sorted_dict, boundary_percentage):
     return left_set, right_set
 
 
-def save_dataset_array_to_file(dataset, destination):
-    np.save(destination, dataset)
-
-
-def load_dataset_from_file(source):
-    dataset = np.load(source)
-    return dataset
-
-
 class DataSet(object):
     def __init__(self, images, labels, fake_data=False):
         if fake_data:
@@ -343,6 +335,17 @@ class DataSet(object):
 
 class DataSets(object):
         pass
+
+
+def save_datasets_to_file(datasets, filepath):
+    with open(filepath, 'wb') as output_file:
+        cPickle.dump(datasets, output_file, cPickle.HIGHEST_PROTOCOL)
+
+
+def load_datasets_from_file(filepath):
+    with open(filepath, 'rb') as input_file:
+        datasets = cPickle.load(input_file)
+    return datasets
 
 
 def read_data_sets(train_dir, test_percentage, validation_percentage, max_num_imgs=-1, fake_data=False):

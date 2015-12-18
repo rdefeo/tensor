@@ -55,15 +55,11 @@ if not RECORDED_SESSION:
         mkdir(TEMP_DATASET_DIR)
         print "Created output folder"
 
-    input_data.save_dataset_array_to_file(dataset.train, TEMP_DATASET_DIR + "/train_set")
-    input_data.save_dataset_array_to_file(dataset.validation, TEMP_DATASET_DIR + "/validation")
-    input_data.save_dataset_array_to_file(dataset.test, TEMP_DATASET_DIR + "/test")
+    input_data.save_datasets_to_file(dataset, TEMP_DATASET_DIR + "/datasets.plk")
 
 else:
     LOGGER.info('Recorded session option selected. Loading arrays in folder %s', TEMP_DATASET_DIR)
-    dataset.train = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/train_set.npy")
-    dataset.validation = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/validation.npy")
-    dataset.test = input_data.load_dataset_from_file(TEMP_DATASET_DIR + "/test.npy")
+    dataset = input_data.load_datasets_from_file(TEMP_DATASET_DIR + "/datasets.plk")
     LOGGER.info('Dataset loading complete')
 
 sess = tf.InteractiveSession()
