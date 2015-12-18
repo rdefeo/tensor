@@ -86,7 +86,7 @@ correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 print accuracy.eval(feed_dict={x: dataset.test.images, y_: dataset.test.labels})
 
-# first layer
+#  first layer
 W_conv1 = weight_variable([5, 5, 1, 32])
 b_conv1 = bias_variable([32])
 x_image = tf.reshape(x, [-1, 100, 100, 1])
