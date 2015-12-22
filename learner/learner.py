@@ -8,11 +8,11 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
 
-TRAINING_SET_DIR = '../grabber/out'
-TEMP_DATASET_DIR = 'out'
+TRAINING_SET_DIR = '/media/alessio/DATA/ML_workspace/img_out'
+TEMP_DATASET_DIR = '/media/alessio/DATA/ML_workspace/data_out'
 # Set negative to disable, number of images to browse, actual number of images in
 # datasets will be lower depending on FORBIDDEN_ORIENTATIONS defined in input_data.py
-MAXIMUM_NUM_IMGS = 1200
+MAXIMUM_NUM_IMGS = 5000
 RECORDED_SESSION = True
 
 
@@ -116,7 +116,7 @@ b_fc2 = bias_variable([5])
 y_conv = tf.nn.softmax(tf.matmul(h_fc1_drop, W_fc2) + b_fc2)
 
 # train
-cross_entropy = -tf.reduce_sum(y_ * tf.log(y_conv))
+cross_entropy = -tf.reduce_sum(y_*tf.log(tf.clip_by_value(y_conv, 1e-10, 1.0)))
 train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
