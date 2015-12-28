@@ -20,7 +20,7 @@ LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
 
 IMG_DIR = '../grabber/out'
-MAX_NUM_ITERATIONS = 5
+MAX_NUM_ITERATIONS = 20
 MAX_NUM_IMG = 5000
 
 
@@ -78,6 +78,21 @@ def get_img_file_path(img_id, path):
     return None
 
 
+def sort_imgs(path):
+    imgs_by_rpy = defaultdict(list)
+    local_imgs = get_imgs_id(path)
+
+    for (product, img) in local_imgs:
+        img_db = retrieve_img(img, product)
+        if img_db is not None:
+            if 'x' in img_db and 'y' in img_db and 'z' in img_db:
+                rpy = str(img_db['x']) + '_' + str(img_db['y']) + '_' + str(img_db['z'])
+                imgs_by_rpy[rpy].append(str(img))
+            else:
+                imgs_by_rpy['invalid_orientation'].append(str(img))
+    return imgs_by_rpy
+
+
 def get_imgs_block(img_ids, img_dir_path):
     images = []
     for img_id in img_ids:
@@ -101,19 +116,7 @@ if not (exists(IMG_DIR)) or listdir(IMG_DIR) == []:
     print "Image folder does not exist or is empty."
     exit()
 
-imgs_by_orientation = defaultdict(list)
-local_imgs = get_imgs_id(IMG_DIR)
-
-for (product, img) in local_imgs:
-    img_db = retrieve_img(img, product)
-    if img_db is not None:
-        if 'x' in img_db and 'y' in img_db and 'z' in img_db:
-            rpy = str(img_db['x']) + '_' + str(img_db['y']) + '_' + str(img_db['z'])
-            imgs_by_orientation[rpy].append(str(img))
-        else:
-            imgs_by_orientation['invalid_orientation'].append(str(img))
-
-del local_imgs
+imgs_by_orientation = sort_imgs(IMG_DIR)
 
 for orientation in imgs_by_orientation:
     LOGGER.info("%s : %i", orientation, len(imgs_by_orientation[orientation]))
@@ -128,6 +131,6 @@ while iteration <= MAX_NUM_ITERATIONS:
             if imgs is not None:
                 imgs_mosaic = mosaic(12, imgs)
                 imshow(orientation, imgs_mosaic)
-                waitKey(0)
+                waitKey(10)
     iteration += 1
 

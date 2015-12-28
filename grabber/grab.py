@@ -18,7 +18,7 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.ERROR)
 logging.info('Starting logger for image grabber.')
 
-OUT_DIR = 'out'
+OUT_DIR = '/media/alessio/DATA/ML_workspace/img_out'
 MAX_NUM_PRODUCTS = 400000
 
 EXCLUDED_IMAGE_ORIENTATIONS = [(270, 90),
@@ -26,10 +26,11 @@ EXCLUDED_IMAGE_ORIENTATIONS = [(270, 90),
                                (180, 180),
                                (90, 180)]
 
+
 def is_corrupted(stream):
     """Check if the data streamed by url request is a valid image
     :param stream: raw data from url
-    :return bool: whether it is a valid image or not
+    :return: whether it is a valid image or not
     """
     try:
         img = Image.open(StringIO(stream.content))
@@ -98,23 +99,27 @@ def process_image(img, data):
         url = img['url']
         img_id = img['_id']
         img_filename = OUT_DIR + "/" + str(product_id) + "_" + str(img_id) + ".jpg"
-        if "image_processed_status" not in img and is_valid_orientation(img):  # check if image already exist
-            img_raw_data = requests.get(url, stream=True)
-            if img_raw_data.status_code == 200:
-                if not is_corrupted(img_raw_data):
-                    processed_img = image_raw_preprocessing(img_raw_data)
-                    if processed_img is not None:
-                        imwrite(img_filename, processed_img)  # save image
-                        image_status = "ok"
+
+        if "image_processed_status" not in img and is_valid_orientation(img):  # check if image already processed
+            if not path.isfile(img_filename):  # check if image file already exists
+                img_raw_data = requests.get(url, stream=True)
+                if img_raw_data.status_code == 200:
+                    if not is_corrupted(img_raw_data):
+                        processed_img = image_raw_preprocessing(img_raw_data)
+                        if processed_img is not None:
+                            imwrite(img_filename, processed_img)  # save image
+                            image_status = "ok"
+                        else:
+                            image_status = "autocropped_failed"
+
                     else:
-                        image_status = "autocropped_failed"
+                        image_status = "image_corrupted"
 
                 else:
-                    image_status = "image_corrupted"
-
+                    print("Unable to retrieve image " + str(img_index) + "/" + str(prd_index))
+                    image_status = "http_fail"
             else:
-                print("Unable to retrieve image " + str(img_index) + "/" + str(prd_index))
-                image_status = "http_fail"
+                image_status = "ok"
 
             data["images.%s.image_processed_status" % img_index] = image_status  # update img status
         else:
@@ -135,33 +140,31 @@ if not (path.exists(OUT_DIR)):
     mkdir(OUT_DIR)
     print "Created output folder"
 
-products = collection.find().batch_size(50)
+products = collection.find().limit(MAX_NUM_PRODUCTS).batch_size(30)
 
 print "Downloading images..."
-print_interval = min((products.count(), MAX_NUM_PRODUCTS)) / 50
+print_interval = MAX_NUM_PRODUCTS / 50
 counters = defaultdict(int)
 
 for prd_index, product in enumerate(products):
-    if counters["images_attempted"] < MAX_NUM_PRODUCTS:
-        product_status = "ok"
-        product_id = product['_id']
+    product_status = "ok"
+    product_id = product['_id']
 
-        if prd_index % print_interval == 0:
-            print(str(prd_index / print_interval * 2) + "% of products scanned")
+    if prd_index % print_interval == 0:
+        print(str(prd_index / print_interval * 2) + "% of products scanned")
 
-        db_changes = {}
-        for img_index, img_data in enumerate(product['images']):
-            counters["images_attempted"] += 1
-            processed_image_status = process_image(img_data, db_changes)
-            counters[processed_image_status] += 1
-            if processed_image_status is not "ok":
-                product_status = "failed"
+    db_changes = {}
+    for img_index, img_data in enumerate(product['images']):
+        counters["images_attempted"] += 1
+        processed_image_status = process_image(img_data, db_changes)
+        counters[processed_image_status] += 1
+        if processed_image_status is not "ok":
+            product_status = "failed"
 
-        db_changes["processed_status"] = product_status  # update_product_status
-        update_product(db_changes, product_id)
-        counters["products_attempted"] += 1
-    else:
-        break
+    db_changes["processed_status"] = product_status  # update_product_status
+    update_product(db_changes, product_id)
+    counters["products_attempted"] += 1
+
 
 LOGGER.info("100% of products scanned.")
 LOGGER.info("Total number of processed products: %i", counters["products_attempted"])
