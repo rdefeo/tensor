@@ -282,8 +282,6 @@ class DataSet(object):
             # Convert shape from [num examples, rows, columns, depth]
             # to [num examples, rows*columns] (assuming depth == 1)
             assert len(images.shape) == 3
-            images = images.reshape(images.shape[0],
-                                    images.shape[1] * images.shape[2])
             # Convert from [0, 255] -> [0.0, 1.0].
             images = images.astype(np.float32)
             images = np.multiply(images, 1.0 / 255.0)
@@ -334,7 +332,22 @@ class DataSet(object):
 
 
 class DataSets(object):
-        pass
+    def __init__(self, train_dataset, validation_dataset, test_dataset):
+        self._train = train_dataset
+        self._validation = validation_dataset
+        self._test = test_dataset
+
+    @property
+    def train(self):
+        return self._train
+
+    @property
+    def validation(self):
+        return self._validation
+
+    @property
+    def test(self):
+        return self._test
 
 
 def save_datasets_to_file(datasets, filepath):
@@ -348,27 +361,18 @@ def load_datasets_from_file(filepath):
     return datasets
 
 
-def read_data_sets(train_dir, test_percentage, validation_percentage, max_num_imgs=-1, fake_data=False):
+def get_data_sets(train_dir, test_percentage, validation_percentage, max_num_imgs=-1):
     """Reads the images in a directory and sort them in three sets for ANN feeding.
 
     Args:
         train_dir (str): Data points images directory
         test_percentage (float): Percentage of data points to be used exclusively for test
         validation_percentage (float): Percentage of training data points to be used specifically for validation
-        fake_data (bool): True if you need to initialize a dummy element
         max_num_imgs (int): maximum number of images to process, negative values implies no boud.
 
     Returns:
         DataSets: Incorporates training, validation and test set
     """
-
-    data_sets = DataSets()
-
-    if fake_data:
-        data_sets.train = DataSet([], [], fake_data=True)
-        data_sets.validation = DataSet([], [], fake_data=True)
-        data_sets.test = DataSet([], [], fake_data=True)
-        return data_sets
 
     LOGGER.info("Sorting imgs in training set folder...")
     sorted_imgs = sort_imgs_in_path(train_dir, max_num_imgs)
@@ -391,8 +395,8 @@ def read_data_sets(train_dir, test_percentage, validation_percentage, max_num_im
     test_images, test_labels = shuffle_in_unison(test_images, test_labels)
     LOGGER.info("Datasets ready.")
 
-    data_sets.train = DataSet(train_images, train_labels)
-    data_sets.validation = DataSet(validation_images, validation_labels)
-    data_sets.test = DataSet(test_images, test_labels)
+    train_dataset = DataSet(train_images, train_labels)
+    validation_dataset = DataSet(validation_images, validation_labels)
+    test_dataset = DataSet(test_images, test_labels)
 
-    return data_sets
+    return DataSets(train_dataset, validation_dataset, test_dataset)

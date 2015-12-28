@@ -12,7 +12,8 @@ TRAINING_SET_DIR = '/media/alessio/DATA/ML_workspace/img_out'
 TEMP_DATASET_DIR = '/media/alessio/DATA/ML_workspace/data_out'
 # Set negative to disable, number of images to browse, actual number of images in
 # datasets will be lower depending on FORBIDDEN_ORIENTATIONS defined in input_data.py
-MAXIMUM_NUM_IMGS = 5000
+MAXIMUM_NUM_IMGS = 1000
+MAX_ITERATIONS = 1000  # 20000
 RECORDED_SESSION = True
 
 
@@ -37,8 +38,6 @@ def max_pool_2x2(x):
 
 # Script start
 
-dataset = input_data.DataSets()
-
 if not RECORDED_SESSION:
     LOGGER.info('New session started. Processing directory: "%s"', TRAINING_SET_DIR)
     if not (exists(TRAINING_SET_DIR)) or listdir(TRAINING_SET_DIR) == []:
@@ -47,7 +46,7 @@ if not RECORDED_SESSION:
 
     if MAXIMUM_NUM_IMGS <= 0:
         LOGGER.info("Selected maximum images sample size %i", MAXIMUM_NUM_IMGS)
-    dataset = input_data.read_data_sets(TRAINING_SET_DIR, 20, 20, MAXIMUM_NUM_IMGS)
+    dataset = input_data.get_data_sets(TRAINING_SET_DIR, 20, 20, MAXIMUM_NUM_IMGS)
 
     # Save datasets
 
@@ -64,26 +63,8 @@ else:
 
 sess = tf.InteractiveSession()
 
-x = tf.placeholder("float", shape=[None, 10000])
+x = tf.placeholder("float", shape=[None, 100, 100])
 y_ = tf.placeholder("float", shape=[None, 5])
-W = tf.Variable(tf.zeros([10000, 5]))
-b = tf.Variable(tf.zeros([5]))
-sess.run(tf.initialize_all_variables())
-
-y = tf.nn.softmax(tf.matmul(x, W) + b)
-
-cross_entropy = -tf.reduce_sum(y_ * tf.log(y))
-
-train_step = tf.train.GradientDescentOptimizer(0.01).minimize(cross_entropy)
-
-for i in range(1000):
-    batch = dataset.train.next_batch(50)
-    train_step.run(feed_dict={x: batch[0], y_: batch[1]})
-
-correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
-
-accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-print accuracy.eval(feed_dict={x: dataset.test.images, y_: dataset.test.labels})
 
 #  first layer
 W_conv1 = weight_variable([5, 5, 1, 32])
@@ -121,7 +102,7 @@ train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 sess.run(tf.initialize_all_variables())
-for i in range(20000):
+for i in range(MAX_ITERATIONS):
     batch = dataset.train.next_batch(50)
     if i % 100 == 0:
         train_accuracy = accuracy.eval(feed_dict={
