@@ -368,7 +368,7 @@ def get_data_sets(train_dir, test_percentage, validation_percentage, max_num_img
         train_dir (str): Data points images directory
         test_percentage (float): Percentage of data points to be used exclusively for test
         validation_percentage (float): Percentage of training data points to be used specifically for validation
-        max_num_imgs (int): maximum number of images to process, negative values implies no boud.
+        max_num_imgs (int): maximum number of images to process, negative values implies no bound.
 
     Returns:
         DataSets: Incorporates training, validation and test set
