@@ -15,9 +15,11 @@ LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
 
 IMG_SIZE = 100
-FORBIDDEN_ORIENTATIONS = ['0_90_270',
-                          '0_0_315',
-                          'invalid_orientation']
+ALLOWED_ORIENTATIONS = ['0_0_270',
+                        '0_0_0',
+                        '0_0_90',
+                        '0_0_45',
+                        '0_0_180']
 
 
 def pymongo_init_working_collection():
@@ -40,7 +42,7 @@ def get_dict_size(sorted_dict):
     return size
 
 
-def get_imgs_id(path, max_num_imgs=-1):
+def get_imgs_id(path):
     """Gets the images ids.
 
     Given a path, it returns a list of the
@@ -48,16 +50,12 @@ def get_imgs_id(path, max_num_imgs=-1):
 
     Args:
         path (str): images directory
-        max_num_imgs (int): maximum number of images to process,
-                            negative value implies unlimited imgs.
 
     Returns:
         list: list of images ids
     """
     ids = []
     id_list = listdir(path)
-    if max_num_imgs > 0:
-        id_list = id_list[:max_num_imgs]
     for i in id_list:
         product_id = i[:24]
         img_id = i[25:49]
@@ -102,7 +100,7 @@ def get_img_file_path(img_id, path):
     return None
 
 
-def sort_imgs_in_path(path, max_num_imgs=-1):
+def sort_imgs_in_path(path, max_num_imgs):
     """Sort images by orientation.
 
     Images in a folder are sorted by their orientation.
@@ -111,43 +109,44 @@ def sort_imgs_in_path(path, max_num_imgs=-1):
 
     Args:
         path (str): imgs directory
-        max_num_imgs (int): maximum number of images to process,
-                            negative values implies unlimited imgs.
+        max_num_imgs (int): maximum number of images to process
 
     Returns:
         dict: dictionary of imgs sorted by orientation
     """
     imgs_by_rpy = defaultdict(list)
-    local_imgs = get_imgs_id(path, max_num_imgs)
+    local_imgs = get_imgs_id(path)
     coll = pymongo_init_working_collection()
+    sorted_imgs_counter = 0
 
-    for (product, img) in local_imgs:
-        img_db = retrieve_img_data_from_db(img, product, coll)
-        if img_db is not None:
-            if 'x' in img_db and 'y' in img_db and 'z' in img_db:
-                rpy = str(img_db['x']) + '_' + str(img_db['y']) + '_' + str(img_db['z'])
-                imgs_by_rpy[rpy].append(str(img))
-            else:
-                imgs_by_rpy['invalid_orientation'].append(str(img))
+    while sorted_imgs_counter <= max_num_imgs:
+        for (product, img) in local_imgs:
+            img_db = retrieve_img_data_from_db(img, product, coll)
+            if img_db is not None:
+                if 'x' in img_db and 'y' in img_db and 'z' in img_db:
+                    rpy = str(img_db['x']) + '_' + str(img_db['y']) + '_' + str(img_db['z'])
+                    if rpy in ALLOWED_ORIENTATIONS:
+                        imgs_by_rpy[rpy].append(str(img))
+                        sorted_imgs_counter += 1
     return imgs_by_rpy
 
 
-def clean_set(sorted_images_dict, forbidden_orientation_list):
-    """Delete unwanted orientations from a dict.
-
-    Args:
-        sorted_images_dict (dict):
-        forbidden_orientation_list (list): list of forbidden orientations (keys)
-
-    Returns:
-        dict: cleaned dictionary
-    """
-    for orientation in forbidden_orientation_list:
-        try:
-            sorted_images_dict = remove_dict_key(sorted_images_dict, orientation)
-        except KeyError as e:
-            LOGGER.warning('Orientation not found while cleaning dataset from invalid orientations:' + str(e))
-    return sorted_images_dict
+# def clean_set(sorted_images_dict, forbidden_orientation_list):
+#     """Delete unwanted orientations from a dict.
+#
+#     Args:
+#         sorted_images_dict (dict):
+#         forbidden_orientation_list (list): list of forbidden orientations (keys)
+#
+#     Returns:
+#         dict: cleaned dictionary
+#     """
+#     for orientation in forbidden_orientation_list:
+#         try:
+#             sorted_images_dict = remove_dict_key(sorted_images_dict, orientation)
+#         except KeyError as e:
+#             LOGGER.warning('Orientation not found while cleaning dataset from invalid orientations:' + str(e))
+#     return sorted_images_dict
 
 
 def create_label_one_hot_mapping(sorted_dict):
@@ -157,7 +156,9 @@ def create_label_one_hot_mapping(sorted_dict):
     set of keys in a dictionary to a one-hot vector.
 
     Example:
-        mapping["roll_pitch_yaw"] = [1, 0, 0, 0, 0]
+        mapping["0_90_90"] = [1, 0, 0, 0, 0]
+        mapping["0_0_180"] = [0, 1, 0, 0, 0]
+        ...
 
     Args:
         sorted_dict (dict): dict of images sorted by orientation
@@ -361,7 +362,7 @@ def load_datasets_from_file(filepath):
     return datasets
 
 
-def get_data_sets(train_dir, test_percentage, validation_percentage, max_num_imgs=-1):
+def get_data_sets(train_dir, test_percentage, validation_percentage, max_num_imgs):
     """Reads the images in a directory and sort them in three sets for ANN feeding.
 
     Args:
@@ -376,7 +377,7 @@ def get_data_sets(train_dir, test_percentage, validation_percentage, max_num_img
 
     LOGGER.info("Sorting imgs in training set folder...")
     sorted_imgs = sort_imgs_in_path(train_dir, max_num_imgs)
-    sorted_imgs = clean_set(sorted_imgs, FORBIDDEN_ORIENTATIONS)
+    # sorted_imgs = clean_set(sorted_imgs, FORBIDDEN_ORIENTATIONS)
 
     LOGGER.info("Partitioning data into training, validation and test groups...")
     label_to_one_hot_map = create_label_one_hot_mapping(sorted_imgs)
