@@ -60,7 +60,8 @@ if RETRAIN_SESSION:
         print "Model folder does not exist or is empty."
         exit()
 
-    datasets = input_data.retrain_session(TRAINING_SET_DIR, TEMP_DATASET_DIR, VALIDATION_PERCENTAGE, DATASET_SIZE)
+    datasets = input_data.retrain_session(
+            TRAINING_SET_DIR, TEMP_DATASET_DIR, VALIDATION_PERCENTAGE, DATASET_SIZE)
 
 else:
 
@@ -76,7 +77,8 @@ else:
             LOGGER.info("New session started")
             LOGGER.info("Test set size: %i  Train set size: %i  Validation percentage: %i",
                         TEST_SET_SIZE, TRAIN_SET_SIZE, VALIDATION_PERCENTAGE)
-        datasets = input_data.get_datasets(TRAINING_SET_DIR, TEST_SET_SIZE, VALIDATION_PERCENTAGE, DATASET_SIZE)
+        datasets = input_data.get_datasets(
+                TRAINING_SET_DIR, TEST_SET_SIZE, VALIDATION_PERCENTAGE, DATASET_SIZE, TEMP_DATASET_DIR)
 
         # Save datasets
 
@@ -175,6 +177,8 @@ with tf.Session() as sess:
     writer = tf.train.SummaryWriter(TF_LOG_DIR, sess.graph_def)
     tf.initialize_all_variables().run()
 
+    # Train
+
     for i in range(MAX_ITERATIONS):
         batch = datasets.train.next_batch(BATCH_SIZE)
         if i % 100 == 0:
@@ -185,6 +189,8 @@ with tf.Session() as sess:
             writer.add_summary(summary_str, i)
             print "step %d, training accuracy %g" % (i, train_accuracy)
         train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+
+    # Test
 
     print "test accuracy %g" % accuracy.eval(feed_dict={
         x: datasets.test.images, y_: datasets.test.labels, keep_prob: 1.0})
