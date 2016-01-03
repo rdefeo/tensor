@@ -8,19 +8,20 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
 
-TRAINING_SET_DIR = '/media/alessio/DATA/ML_workspace/img_out'
+TRAINING_SET_DIR = '/media/alessio/DATA/ML_workspace/imgs'
 TEMP_DATASET_DIR = '/media/alessio/DATA/ML_workspace/data_out'
 TF_LOG_DIR = '/media/alessio/DATA/ML_workspace/log'
 MODEL_DIR = '/media/alessio/DATA/ML_workspace/model'
-# Set negative to disable, number of images to browse, actual number of images in
-# datasets will be lower depending on FORBIDDEN_ORIENTATIONS defined in input_data.py
-MAX_NUM_IMGS = 1000
+
+TEST_SET_SIZE = 10000  # cannot be incremented later, retrain session always reload an existing test set for comparison
+TRAIN_SET_SIZE = 1000  # can be incremented in retrain session
+DATASET_SIZE = TEST_SET_SIZE + TRAIN_SET_SIZE  # indicates the number of samples, including old ones if retraining
+VALIDATION_PERCENTAGE = 10  # if retraining, make sure this values is the same as the original dataset
 BATCH_SIZE = 50
 MAX_ITERATIONS = 400  # MAX_ITERATIONS * BATCH_SIZE / MAX_NUM_IMGS ~ 18-20
-TEST_PERCENTAGE = 15
-VALIDATION_PERCENTAGE = 10
-DATASET_AVAILABLE = False
-RESUME_SESSION = False
+
+DATASETS_AVAILABLE = False
+RETRAIN_SESSION = False
 
 
 def weight_variable(shape):
@@ -44,28 +45,45 @@ def max_pool_2x2(x):
 
 # Script start
 
-if not DATASET_AVAILABLE:
-    LOGGER.info('New session started. Processing directory: "%s"', TRAINING_SET_DIR)
-    if not (exists(TRAINING_SET_DIR)) or listdir(TRAINING_SET_DIR) == []:
-        print "Training set folder does not exist or is empty."
+LOGGER.info('New session started. Processing directory: "%s"', TRAINING_SET_DIR)
+if not (exists(TRAINING_SET_DIR)) or listdir(TRAINING_SET_DIR) == []:
+    print "Training set folder does not exist or is empty."
+    exit()
+
+if RETRAIN_SESSION:
+    LOGGER.info("Retraining previously generated model")
+    if not (exists(TEMP_DATASET_DIR)) or listdir(TEMP_DATASET_DIR) == []:
+        print "Temporary files folder does not exist or is empty."
         exit()
 
-    if MAX_NUM_IMGS >= 0:
-        LOGGER.info("Selected maximum images sample size: %i", MAX_NUM_IMGS)
-    dataset = input_data.get_data_sets(TRAINING_SET_DIR, TEST_PERCENTAGE, VALIDATION_PERCENTAGE, MAX_NUM_IMGS)
+    if not (exists(MODEL_DIR)) or listdir(MODEL_DIR) == []:
+        print "Model folder does not exist or is empty."
+        exit()
 
-    # Save datasets
-
-    if not (exists(TEMP_DATASET_DIR)):
-        mkdir(TEMP_DATASET_DIR)
-        print "Created output folder"
-
-    input_data.save_datasets_to_file(dataset, TEMP_DATASET_DIR + "/datasets.plk")
+    datasets = input_data.retrain_session(TRAINING_SET_DIR, TEMP_DATASET_DIR, VALIDATION_PERCENTAGE, DATASET_SIZE)
 
 else:
-    LOGGER.info('Recorded session option selected. Loading arrays in folder %s', TEMP_DATASET_DIR)
-    dataset = input_data.load_datasets_from_file(TEMP_DATASET_DIR + "/datasets.plk")
-    LOGGER.info('Dataset loading complete')
+
+    if DATASETS_AVAILABLE:
+
+        LOGGER.info('Recorded session option selected. Loading arrays in folder %s', TEMP_DATASET_DIR)
+        datasets = input_data.reload_session(TEMP_DATASET_DIR)
+        LOGGER.info('Dataset loading complete')
+
+    else:
+
+        if DATASET_SIZE >= 0:
+            LOGGER.info("New session started")
+            LOGGER.info("Test set size: %i  Train set size: %i  Validation percentage: %i",
+                        TEST_SET_SIZE, TRAIN_SET_SIZE, VALIDATION_PERCENTAGE)
+        datasets = input_data.get_datasets(TRAINING_SET_DIR, TEST_SET_SIZE, VALIDATION_PERCENTAGE, DATASET_SIZE)
+
+        # Save datasets
+
+        if not (exists(TEMP_DATASET_DIR)):
+            mkdir(TEMP_DATASET_DIR)
+            print "Created output folder"
+
 
 # Set up tf logger and saver working dirs
 
@@ -138,7 +156,7 @@ with tf.Session() as sess:
 
     saver = tf.train.Saver()
 
-    if RESUME_SESSION:
+    if RETRAIN_SESSION:
         saver.restore(sess, MODEL_DIR + "/model_parameters.ckpt")
 
     with tf.name_scope("cross_entropy") as scope:  # scoping for tensorboard example
@@ -158,7 +176,7 @@ with tf.Session() as sess:
     tf.initialize_all_variables().run()
 
     for i in range(MAX_ITERATIONS):
-        batch = dataset.train.next_batch(BATCH_SIZE)
+        batch = datasets.train.next_batch(BATCH_SIZE)
         if i % 100 == 0:
             result = sess.run([merged, accuracy], feed_dict={
                 x: batch[0], y_: batch[1], keep_prob: 1.0})
@@ -169,7 +187,7 @@ with tf.Session() as sess:
         train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
     print "test accuracy %g" % accuracy.eval(feed_dict={
-        x: dataset.test.images, y_: dataset.test.labels, keep_prob: 1.0})
+        x: datasets.test.images, y_: datasets.test.labels, keep_prob: 1.0})
 
     saver.save(sess, MODEL_DIR + "/model_parameters.ckpt", global_step=1)
 

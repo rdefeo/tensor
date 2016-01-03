@@ -18,7 +18,7 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.ERROR)
 logging.info('Starting logger for image grabber.')
 
-OUT_DIR = '/media/alessio/DATA/ML_workspace/img_out'
+OUT_DIR = '/media/alessio/DATA/ML_workspace/imgs'
 MAX_NUM_PRODUCTS = 400000
 
 EXCLUDED_IMAGE_ORIENTATIONS = [(270, 90),
@@ -156,9 +156,13 @@ for prd_index, product in enumerate(products):
     db_changes = {}
     for img_index, img_data in enumerate(product['images']):
         counters["images_attempted"] += 1
+        if counters["images_attempted"] % 100 == 0:
+            print str(counters["images_attempted"]) + " images attempted"
         processed_image_status = process_image(img_data, db_changes)
         counters[processed_image_status] += 1
         if processed_image_status is not "ok":
+            if processed_image_status is "already_processed":
+                continue
             product_status = "failed"
 
     db_changes["processed_status"] = product_status  # update_product_status

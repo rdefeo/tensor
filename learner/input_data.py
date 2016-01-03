@@ -29,12 +29,6 @@ def pymongo_init_working_collection():
     return collection
 
 
-def remove_dict_key(d, key):
-    r = dict(d)
-    del r[key]
-    return r
-
-
 def get_dict_size(sorted_dict):
     size = 0
     for key in sorted_dict:
@@ -119,34 +113,17 @@ def sort_imgs_in_path(path, max_num_imgs):
     coll = pymongo_init_working_collection()
     sorted_imgs_counter = 0
 
-    while sorted_imgs_counter <= max_num_imgs:
-        for (product, img) in local_imgs:
-            img_db = retrieve_img_data_from_db(img, product, coll)
-            if img_db is not None:
-                if 'x' in img_db and 'y' in img_db and 'z' in img_db:
-                    rpy = str(img_db['x']) + '_' + str(img_db['y']) + '_' + str(img_db['z'])
-                    if rpy in ALLOWED_ORIENTATIONS:
-                        imgs_by_rpy[rpy].append(str(img))
-                        sorted_imgs_counter += 1
+    for (product, img) in local_imgs:
+        img_db = retrieve_img_data_from_db(img, product, coll)
+        if img_db is not None:
+            if 'x' in img_db and 'y' in img_db and 'z' in img_db:
+                rpy = str(img_db['x']) + '_' + str(img_db['y']) + '_' + str(img_db['z'])
+                if rpy in ALLOWED_ORIENTATIONS:
+                    imgs_by_rpy[rpy].append(str(img))
+                    sorted_imgs_counter += 1
+                    if sorted_imgs_counter >= max_num_imgs:
+                        break
     return imgs_by_rpy
-
-
-# def clean_set(sorted_images_dict, forbidden_orientation_list):
-#     """Delete unwanted orientations from a dict.
-#
-#     Args:
-#         sorted_images_dict (dict):
-#         forbidden_orientation_list (list): list of forbidden orientations (keys)
-#
-#     Returns:
-#         dict: cleaned dictionary
-#     """
-#     for orientation in forbidden_orientation_list:
-#         try:
-#             sorted_images_dict = remove_dict_key(sorted_images_dict, orientation)
-#         except KeyError as e:
-#             LOGGER.warning('Orientation not found while cleaning dataset from invalid orientations:' + str(e))
-#     return sorted_images_dict
 
 
 def create_label_one_hot_mapping(sorted_dict):
@@ -156,8 +133,8 @@ def create_label_one_hot_mapping(sorted_dict):
     set of keys in a dictionary to a one-hot vector.
 
     Example:
-        mapping["0_90_90"] = [1, 0, 0, 0, 0]
-        mapping["0_0_180"] = [0, 1, 0, 0, 0]
+        mapping["0_90_90"] = numpy.array(1, 0, 0, 0, 0)
+        mapping["0_0_180"] = numpy.array(0, 1, 0, 0, 0)
         ...
 
     Args:
@@ -239,6 +216,8 @@ def from_dict_to_arrays(sorted_dict, path, mapping):
     individual = 0
     for orientation, img_list in sorted_dict.iteritems():
         for img_id in img_list:
+            if individual % 100 == 0:
+                LOGGER.info("%i images processed", individual)
             img = acquire_img(img_id, path)
             label = mapping[orientation]
             dataset_img[individual] = img
@@ -247,28 +226,25 @@ def from_dict_to_arrays(sorted_dict, path, mapping):
     return dataset_img, dataset_label
 
 
-def part_data(sorted_dict, boundary_percentage):
-    """Parts lists belonging to a dict.
+def split_array(array, size):
+    left_array = array[:size]
+    right_array = array[size:]
+    return left_array, right_array
 
-    Each list is parted in two. "boundary percentage" specify
-    the size of the first list compared to the original one.
-    Two dict are returned, one containing all right hand lists
-    and one containing all left hand ones.
 
-    Args:
-        sorted_dict (dict):
-        boundary_percentage (float):
+def split_array_percent(array, percentage):
+    array_dim = array.shape[0]
+    left_array = array[:(array_dim * percentage / 100)]
+    right_array = array[(array_dim * percentage / 100):]
+    return left_array, right_array
 
-    Returns:
-        dict: dict right hand lists
-        dict: dict left hand lists
-    """
-    right_set = defaultdict(list)
-    left_set = defaultdict(list)
-    for key in sorted_dict:
-        left_set[key] = sorted_dict[key][:(int(len(sorted_dict[key]) * boundary_percentage / 100))]
-        right_set[key] = sorted_dict[key][(int(len(sorted_dict[key]) * boundary_percentage / 100)):]
-    return left_set, right_set
+
+def compare_dataset_dict(old_dict, new_dict):
+    assert old_dict.keys() == new_dict.keys()
+    diff_dict = defaultdict(list)
+    for key in old_dict:
+        diff_dict[key] = list(set(new_dict[key]) - set(old_dict[key]))
+    return diff_dict
 
 
 class DataSet(object):
@@ -362,14 +338,16 @@ def load_datasets_from_file(filepath):
     return datasets
 
 
-def get_data_sets(train_dir, test_percentage, validation_percentage, max_num_imgs):
+def get_datasets(train_dir, test_set_size, validation_percentage, max_num_imgs, savedir=""):
     """Reads the images in a directory and sort them in three sets for ANN feeding.
+       If a save directory is specified, all datasets are saved for later use.
 
     Args:
         train_dir (str): Data points images directory
-        test_percentage (float): Percentage of data points to be used exclusively for test
+        test_set_size (float): Amount of data to be reserved for testing
         validation_percentage (float): Percentage of training data points to be used specifically for validation
         max_num_imgs (int): maximum number of images to process, negative values implies no bound.
+        savedir (str): path where to save tmp arrays
 
     Returns:
         DataSets: Incorporates training, validation and test set
@@ -377,27 +355,84 @@ def get_data_sets(train_dir, test_percentage, validation_percentage, max_num_img
 
     LOGGER.info("Sorting imgs in training set folder...")
     sorted_imgs = sort_imgs_in_path(train_dir, max_num_imgs)
-    # sorted_imgs = clean_set(sorted_imgs, FORBIDDEN_ORIENTATIONS)
+    if savedir != "":
+        save_datasets_to_file(sorted_imgs, savedir + "/processed_imgs.rcrd")
 
-    LOGGER.info("Partitioning data into training, validation and test groups...")
+    LOGGER.info("Mapping labels to one hot vectors...")
     label_to_one_hot_map = create_label_one_hot_mapping(sorted_imgs)
-    test_dict, train_and_validation_dict = part_data(sorted_imgs, test_percentage)
-    validation_dict, train_dict = part_data(train_and_validation_dict, validation_percentage)
-    del train_and_validation_dict
-    LOGGER.info("Retrieving and processing %i train images...", get_dict_size(train_dict))
-    train_images, train_labels = from_dict_to_arrays(train_dict, train_dir, label_to_one_hot_map)
-    LOGGER.info("Retrieving and processing %i validation images...", get_dict_size(validation_dict))
-    validation_images, validation_labels = from_dict_to_arrays(validation_dict, train_dir, label_to_one_hot_map)
-    LOGGER.info("Retrieving and processing %i test images...", get_dict_size(test_dict))
-    test_images, test_labels = from_dict_to_arrays(test_dict, train_dir, label_to_one_hot_map)
-    LOGGER.info("Shuffling datsets...")
-    train_images, train_labels = shuffle_in_unison(train_images, train_labels)
-    validation_images, validation_labels = shuffle_in_unison(validation_images, validation_labels)
-    test_images, test_labels = shuffle_in_unison(test_images, test_labels)
+
+    LOGGER.info("Retrieving images and processing into numpy arrays...")
+    images, labels = from_dict_to_arrays(sorted_imgs, train_dir, label_to_one_hot_map)
+    images, labels = shuffle_in_unison(images, labels)
+
+    LOGGER.info("Slicing and saving test images...")
+    test_images, train_images = split_array(images, test_set_size)
+    test_labels, train_labels = split_array(labels, test_set_size)
+    test_dataset = DataSet(test_images, test_labels)
+    if savedir != "":
+        save_datasets_to_file(test_dataset, savedir + "/test.dtst")
+
+    LOGGER.info("Slicing train and validation set...")
+    validation_images, training_images = split_array_percent(train_images, validation_percentage)
+    validation_labels, training_labels = split_array_percent(train_labels, validation_percentage)
+    training_dataset = DataSet(training_images, training_labels)
+    validation_dataset = DataSet(validation_images, validation_labels)
+
+    LOGGER.info("Saving train and validation set...")
+    if savedir != "":
+        save_datasets_to_file(training_dataset, savedir + "/training.dtst")
+        save_datasets_to_file(validation_dataset, savedir + "/validation.dtst")
+
     LOGGER.info("Datasets ready.")
 
-    train_dataset = DataSet(train_images, train_labels)
-    validation_dataset = DataSet(validation_images, validation_labels)
-    test_dataset = DataSet(test_images, test_labels)
+    return DataSets(training_dataset, validation_dataset, test_dataset)
 
-    return DataSets(train_dataset, validation_dataset, test_dataset)
+
+def reload_session(savedir):
+    training_dataset = load_datasets_from_file(savedir + "/training.dtst")
+    validation_dataset = load_datasets_from_file(savedir + "/validation.dtst")
+    test_dataset = load_datasets_from_file(savedir + "/test.dtst")
+    return DataSets(training_dataset, validation_dataset, test_dataset)
+
+
+def retrain_session(train_dir, savedir, validation_percentage, new_max_num_imgs):
+    LOGGER.info("Sorting imgs in training set folder...")
+    sorted_imgs = sort_imgs_in_path(train_dir, new_max_num_imgs)
+    previously_sorted_imgs = load_datasets_from_file(savedir + "/processed_imgs.rcrd")
+    save_datasets_to_file(sorted_imgs, savedir + "/processed_imgs.rcrd")
+    new_sorted_imgs = compare_dataset_dict(previously_sorted_imgs, sorted_imgs)
+
+    LOGGER.info("Mapping labels to one hot vectors...")
+    label_to_one_hot_map = create_label_one_hot_mapping(sorted_imgs)
+    del sorted_imgs
+    del previously_sorted_imgs
+
+    LOGGER.info("Retrieving test set...")
+    test_dataset = load_datasets_from_file(savedir + "/test.dtst")
+
+    LOGGER.info("Retrieving images and processing into numpy arrays...")
+    images, labels = from_dict_to_arrays(new_sorted_imgs, train_dir, label_to_one_hot_map)
+    images, labels = shuffle_in_unison(images, labels)
+    del new_sorted_imgs
+
+    LOGGER.info("Slicing train and validation set...")
+    validation_images, training_images = split_array_percent(images, validation_percentage)
+    validation_labels, training_labels = split_array_percent(labels, validation_percentage)
+    training_dataset = DataSet(training_images, training_labels)
+    validation_dataset = DataSet(validation_images, validation_labels)
+
+    LOGGER.info("Saving train and validation set...")
+
+    with load_datasets_from_file(savedir + "/training.dtst") as old_training_dataset:
+        np.append(old_training_dataset.images, training_dataset.images, axis=0)
+        np.append(old_training_dataset.labels, training_dataset.labels, axis=0)
+        save_datasets_to_file(old_training_dataset, savedir + "/training.dtst")
+
+    with load_datasets_from_file(savedir + "/validation.dtst") as old_validation_dataset:
+        np.append(old_validation_dataset.images, validation_dataset.images, axis=0)
+        np.append(old_validation_dataset.labels, validation_dataset.labels, axis=0)
+        save_datasets_to_file(old_validation_dataset, savedir + "/validation.dtst")
+
+    LOGGER.info("Datasets ready.")
+
+    return DataSets(training_dataset, validation_dataset, test_dataset)
