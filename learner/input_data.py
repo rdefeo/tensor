@@ -227,12 +227,28 @@ def from_dict_to_arrays(sorted_dict, path, mapping):
 
 
 def split_array(array, size):
+    """Splits the array in two parts. The left hand part length is given by "size"
+    Args:
+        array (numpy.array):
+        size (int):
+    Returns:
+        numpy.array:
+        numpy.array:
+    """
     left_array = array[:size]
     right_array = array[size:]
     return left_array, right_array
 
 
 def split_array_percent(array, percentage):
+    """Split an array in two parts. The left part length is expressed as a percentage of the original one.
+    Args:
+        array (numpy.array)
+        percentage (int):
+    Returns:
+        numpy.array:
+        numpy.array:
+    """
     array_dim = array.shape[0]
     left_array = array[:(array_dim * percentage / 100)]
     right_array = array[(array_dim * percentage / 100):]
@@ -240,9 +256,19 @@ def split_array_percent(array, percentage):
 
 
 def compare_dataset_dict(old_dict, new_dict):
-    assert old_dict.keys() == new_dict.keys()
+    """Compare two dictionaries of lists. Each list is treated as a set to check which
+    elements of the first dictionary list appears in the respective list of the second dict.
+    It return the dictionaries of elements belonging uniquely to the new dictionary.
+    Args:
+        old_dict (dict(list)):
+        new_dict (dict(list)):
+    Returns:
+        dict(list): dictionary of elements belonging to new_dict but not to old_dict
+    """
+    assert set(old_dict.keys()) == set(new_dict.keys())
     diff_dict = defaultdict(list)
     for key in old_dict:
+
         diff_dict[key] = list(set(new_dict[key]) - set(old_dict[key]))
     return diff_dict
 
@@ -306,6 +332,21 @@ class DataSet(object):
             assert batch_size <= self._num_examples
         end = self._index_in_epoch
         return self._images[start:end], self._labels[start:end]
+
+    def increment_dataset_size(self, images, labels):
+        """Increments the number of images and labels stored in a dataset."""
+        assert images.shape[0] == labels.shape[0], (
+            "images.shape: %s labels.shape: %s" % (images.shape,
+                                                   labels.shape))
+        assert len(images.shape) == len(self._images.shape)
+        assert images.shape[1] == self._images.shape[1] and images.shape[2] == self._images.shape[2]
+        assert len(labels.shape) == len(self._labels.shape)
+        assert labels.shape[1] == self._labels.shape[1]
+        images = images.astype(np.float32)
+        images = np.multiply(images, 1.0 / 255.0)
+        self._num_examples += images.shape[0]
+        self._images = np.append(self._images, images, axis=0)
+        self._labels = np.append(self._labels, labels, axis=0)
 
 
 class DataSets(object):
@@ -423,15 +464,15 @@ def retrain_session(train_dir, savedir, validation_percentage, new_max_num_imgs)
 
     LOGGER.info("Saving train and validation set...")
 
-    with load_datasets_from_file(savedir + "/training.dtst") as old_training_dataset:
-        np.append(old_training_dataset.images, training_dataset.images, axis=0)
-        np.append(old_training_dataset.labels, training_dataset.labels, axis=0)
-        save_datasets_to_file(old_training_dataset, savedir + "/training.dtst")
+    old_training_dataset = load_datasets_from_file(savedir + "/training.dtst")
+    old_training_dataset.increment_dataset_size(training_images, training_labels)
+    save_datasets_to_file(old_training_dataset, savedir + "/training.dtst")
+    del old_training_dataset
 
-    with load_datasets_from_file(savedir + "/validation.dtst") as old_validation_dataset:
-        np.append(old_validation_dataset.images, validation_dataset.images, axis=0)
-        np.append(old_validation_dataset.labels, validation_dataset.labels, axis=0)
-        save_datasets_to_file(old_validation_dataset, savedir + "/validation.dtst")
+    old_validation_dataset = load_datasets_from_file(savedir + "/validation.dtst")
+    old_validation_dataset.increment_dataset_size(validation_images, validation_labels)
+    save_datasets_to_file(old_validation_dataset, savedir + "/validation.dtst")
+    del old_validation_dataset
 
     LOGGER.info("Datasets ready.")
 

@@ -4,6 +4,7 @@ from os.path import exists
 import logging
 import tensorflow as tf
 
+
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 logging.info('Starting logger for image grabber.')
@@ -14,14 +15,14 @@ TF_LOG_DIR = '/media/alessio/DATA/ML_workspace/log'
 MODEL_DIR = '/media/alessio/DATA/ML_workspace/model'
 
 TEST_SET_SIZE = 10000  # cannot be incremented later, retrain session always reload an existing test set for comparison
-TRAIN_SET_SIZE = 1000  # can be incremented in retrain session
+TRAIN_SET_SIZE = 2000  # can be incremented in retrain session
 DATASET_SIZE = TEST_SET_SIZE + TRAIN_SET_SIZE  # indicates the number of samples, including old ones if retraining
 VALIDATION_PERCENTAGE = 10  # if retraining, make sure this values is the same as the original dataset
 BATCH_SIZE = 50
-MAX_ITERATIONS = 400  # MAX_ITERATIONS * BATCH_SIZE / MAX_NUM_IMGS ~ 18-20
+MAX_ITERATIONS = 360  # MAX_ITERATIONS * BATCH_SIZE / (increment of TEST_SET_SIZE) ~ 18-20
 
 DATASETS_AVAILABLE = False
-RETRAIN_SESSION = False
+RETRAIN_SESSION = True  # overrides DATASET_AVAILABLE
 
 
 def weight_variable(shape):
@@ -178,7 +179,9 @@ with tf.Session() as sess:
     tf.initialize_all_variables().run()
 
     # Train
-
+    LOGGER.info("Training start...")
+    LOGGER.info("Processing %i images   Batch size: %i   Number of iterations: %i",
+                datasets.train.images.shape[0], BATCH_SIZE, MAX_ITERATIONS)
     for i in range(MAX_ITERATIONS):
         batch = datasets.train.next_batch(BATCH_SIZE)
         if i % 100 == 0:
@@ -187,15 +190,24 @@ with tf.Session() as sess:
             summary_str = result[0]
             train_accuracy = result[1]
             writer.add_summary(summary_str, i)
-            print "step %d, training accuracy %g" % (i, train_accuracy)
+            LOGGER.info("step %d, training accuracy %g", i, train_accuracy)
         train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
     # Test
 
-    print "test accuracy %g" % accuracy.eval(feed_dict={
-        x: datasets.test.images, y_: datasets.test.labels, keep_prob: 1.0})
+    test_accuracy = 0
+    num_batches = TEST_SET_SIZE / BATCH_SIZE
+    for step in xrange(num_batches):
+        LOGGER.info("Testing step %i of %i", step, num_batches)
+        offset = step * BATCH_SIZE
+        test_batch = datasets.test.next_batch(BATCH_SIZE)
+        batch_accuracy = accuracy.eval(feed_dict={
+            x: test_batch[0], y_: test_batch[1], keep_prob: 1.0})
+        test_accuracy += batch_accuracy/num_batches
 
-    saver.save(sess, MODEL_DIR + "/model_parameters.ckpt", global_step=1)
+    LOGGER.info("Test accuracy %f", test_accuracy)
+
+    saver.save(sess, MODEL_DIR + "/model_parameters.ckpt")
 
 
 
